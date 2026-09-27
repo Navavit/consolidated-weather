@@ -7,6 +7,7 @@
 
 เวลาทั้งหมดเป็นเวลาท้องถิ่นของตำแหน่งนั้น (naive, ไม่มี timezone)
 """
+import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -146,7 +147,7 @@ def export_snapshot(result, export_dir, cfg=None):
 def import_archive(archive_dir, cfg=None):
     """นำเข้าไฟล์ .csv.gz จาก GitHub (branch data) ลง SQLite ข้ามไฟล์ที่เคยนำเข้าแล้ว"""
     files = sorted(Path(archive_dir).glob("runs/**/*.csv.gz"))
-    n_new = 0
+    n_new = n_obs = 0
     with closing(connect(cfg)) as con, con:
         done = {r[0] for r in con.execute("SELECT path FROM imported_files")}
         for f in files:
@@ -159,6 +160,21 @@ def import_archive(archive_dir, cfg=None):
             run_id, _ = _insert_run(con, meta.fetched_at, meta.location, meta.lat, meta.lon, meta.tz, wide)
             con.execute("INSERT INTO imported_files(path, run_id) VALUES (?, ?)", (key, run_id))
             n_new += 1
+        # การบันทึกฝนจากปุ่มบนหน้าเว็บ (issue → observations/<n>.json)
+        for f in sorted(Path(archive_dir).glob("observations/*.json")):
+            key = f.relative_to(archive_dir).as_posix()
+            if key in done:
+                continue
+            o = json.loads(f.read_text(encoding="utf-8"))
+            cur = con.execute(
+                "INSERT INTO observations(obs_time, location, lat, lon, rained, amount_mm, note, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (o["obs_time"], o["location"], o["lat"], o["lon"], int(bool(o["rained"])), o.get("amount_mm"),
+                 (o.get("note") or "") + f" [{o.get('source', '')}]", o.get("created_at") or o["obs_time"]))
+            con.execute("INSERT INTO imported_files(path, run_id) VALUES (?, ?)", (key, -cur.lastrowid))
+            n_obs += 1
+    if n_obs:
+        print(f"นำเข้าการบันทึกฝน {n_obs} รายการ")
     return n_new, len(files)
 
 

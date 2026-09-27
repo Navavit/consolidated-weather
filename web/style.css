@@ -49,6 +49,22 @@ h1 { font-size: 20px; margin: 0; font-weight: 700; }
 .sub { margin: 2px 0 0; color: var(--ink-2); font-size: 13px; }
 .ghost { background: none; border: 1px solid var(--ring); color: var(--ink); border-radius: 8px; padding: 6px 10px; font-size: 16px; cursor: pointer; }
 
+/* แถบบันทึกฝน: อยู่บนสุด กดง่ายด้วยนิ้วโป้ง */
+.rainbar { background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--ring); padding: 14px 16px; margin: 14px 0 4px; }
+.rb-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.rb-q { margin: 0; font-size: 16px; }
+.rb-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.big {
+  font: inherit; font-size: 20px; font-weight: 700; min-height: 56px; border-radius: 12px; cursor: pointer;
+  border: 0; box-shadow: 0 0 0 1px var(--ring);
+}
+.big.rain { background: var(--series-1); color: #fff; }
+.big.dry { background: var(--page); color: var(--ink); }
+.big:active { transform: scale(0.98); }
+.big:focus-visible { outline: 3px solid var(--series-2); outline-offset: 2px; }
+.rb-hint { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
+.ghost.small { font-size: 13px; padding: 4px 10px; font-family: inherit; }
+
 /* filters: หนึ่งแถว เหนือทุกอย่างที่มันควบคุม */
 .filters {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;

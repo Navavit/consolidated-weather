@@ -12,6 +12,8 @@
   python3 collector.py install-launchd --every 60  # สร้างไฟล์ launchd ให้รันเองบน macOS
 """
 import argparse
+import json
+import re
 import subprocess
 import sys
 import time
@@ -105,6 +107,69 @@ def cmd_location(args):
     print(f"ตำแหน่งของฉัน: {me}\nตำแหน่งที่ต้องการ: {targets}")
 
 
+ISSUE_FIELDS = {"ฝนตกไหม": "rain", "ตำแหน่ง": "location", "พิกัด": "coords", "เวลา": "time",
+                "ปริมาณฝน (มม.)": "amount", "หมายเหตุ": "note"}
+
+
+def parse_issue_form(body):
+    """แยกค่าจาก issue form (### หัวข้อ แล้วตามด้วยค่า) → dict ตาม ISSUE_FIELDS"""
+    out = {}
+    for block in re.split(r"^###\s+", body or "", flags=re.M)[1:]:
+        label, _, value = block.partition("\n")
+        value = value.strip()
+        key = ISSUE_FIELDS.get(label.strip())
+        if key and value and value != "_No response_":
+            out[key] = value
+    return out
+
+
+def cmd_observe_issue(args):
+    """อ่าน issue 'บันทึกฝน' จาก event ของ GitHub Actions แล้วเขียน archive/observations/<n>.json"""
+    ev = json.loads(Path(args.event).read_text(encoding="utf-8"))
+    issue = ev["issue"]
+    f = parse_issue_form(issue.get("body"))
+    rain = f.get("rain", "").strip().lower()
+    if "ไม่" in rain or rain in ("no", "n", "0", "false"):
+        rained = False
+    elif "ตก" in rain or rain in ("yes", "y", "1", "true"):
+        rained = True
+    else:
+        sys.exit(f"อ่านช่อง 'ฝนตกไหม' ไม่ได้: {rain!r} (ใส่ 'ตก' หรือ 'ไม่ตก')")
+
+    name = f.get("location", "").strip()
+    xy = core.parse_coords(f.get("coords", ""))
+    if xy is None:
+        # ไม่มีพิกัด: หาจากตำแหน่งชื่อเดียวกันใน config แล้วค่อยลอง geocode
+        cfg = core.load_config()
+        for loc in [cfg["my_location"]] + list(cfg["target_places"]):
+            if not isinstance(loc, str) and loc[2] == name:
+                xy = (loc[0], loc[1])
+        if xy is None and name:
+            la, lo, _ = core.geocode(name)
+            xy = (la, lo)
+    if xy is None:
+        sys.exit("ไม่มีพิกัดหรือชื่อตำแหน่งที่ใช้หาพิกัดได้")
+
+    created = pd.Timestamp(issue["created_at"]).tz_convert("Asia/Bangkok").tz_localize(None)
+    obs_time = pd.Timestamp(f["time"]) if f.get("time") else created
+    amount = None
+    if f.get("amount"):
+        m = re.search(r"\d+(?:\.\d+)?", f["amount"])
+        amount = float(m.group()) if m else None
+
+    rec = {"obs_time": obs_time.strftime("%Y-%m-%d %H:%M:%S"), "location": name or f"{xy[0]:.4f},{xy[1]:.4f}",
+           "lat": round(xy[0], 5), "lon": round(xy[1], 5), "rained": rained, "amount_mm": amount,
+           "note": f.get("note", ""), "source": f"issue#{issue['number']}",
+           "created_at": created.strftime("%Y-%m-%d %H:%M:%S")}
+    out = Path(args.out) / "observations" / f"{issue['number']:06d}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"✅ บันทึกแล้ว: **{'🌧️ ฝนตก' if rained else '☀️ ฝนไม่ตก'}** · {rec['location']} "
+          f"({rec['lat']}, {rec['lon']}) · {rec['obs_time'][:16]}"
+          + (f" · {amount} มม." if amount is not None else "")
+          + "\n\nข้อมูลนี้จะถูกนำไปเทียบกับพยากรณ์ของแต่ละโมเดล (`python3 collector.py sync` แล้วดู notebook ข้อ ⑩)")
+
+
 def cmd_verify(args):
     rec = store.verification_records(use_previous_runs=not args.no_previous_runs)
     if rec.empty:
@@ -165,6 +230,10 @@ def main():
     s.add_argument("--site-dir", help="สร้างหน้าเว็บ (GitHub Pages) ลงโฟลเดอร์นี้")
     s.set_defaults(func=cmd_run)
     sub.add_parser("sync").set_defaults(func=cmd_sync)
+    s = sub.add_parser("observe-issue")
+    s.add_argument("--event", required=True, help="ไฟล์ event JSON ของ GitHub Actions")
+    s.add_argument("--out", default="archive")
+    s.set_defaults(func=cmd_observe_issue)
     s = sub.add_parser("location")
     s.add_argument("--action", choices=["me", "add", "remove"], required=True)
     s.add_argument("--name")

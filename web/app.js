@@ -26,7 +26,7 @@ const CHARTS = [
 ];
 const DAYS = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
 
-const state = { index: null, loc: null, locIdx: 0, highlight: null, param: "tmax", map: null, markers: [] };
+const state = { index: null, loc: null, locIdx: 0, highlight: null, param: "tmax", map: null, markers: [], gps: null };
 
 // ---------------------------------------------------------------------------
 // เครื่องมือ
@@ -135,6 +135,7 @@ async function init() {
     $("edit-loc").hidden = true;
   }
   $("updated").textContent = `อัปเดต ${timeAgo(state.index.generated)} · ${new Date(state.index.generated).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}`;
+  initRainBar();
   const saved = parseInt(store.get("loc") || "0", 10);
   renderChips();
   initMap();
@@ -159,6 +160,7 @@ function renderChips() {
 
 async function selectLocation(i) {
   state.locIdx = i;
+  state.gps = null;                         // เปลี่ยนแท็บ = กลับมาใช้ตำแหน่งของแท็บนั้น
   store.set("loc", String(i));
   [...$("locations").children].forEach((c, j) => c.setAttribute("aria-selected", String(j === i)));
   document.body.style.opacity = "0.6";      // คงหน้าเดิมไว้ระหว่างโหลด ไม่กระพริบ
@@ -180,12 +182,61 @@ async function selectLocation(i) {
 }
 
 function renderAll() {
+  renderRainBar();
   renderBrief();
   renderNext();
   renderRainTable();
   renderEnsemble();
   renderCharts();
   renderParam();
+}
+
+// ---------------------------------------------------------------------------
+// แถบบันทึกฝน: เปิดฟอร์ม GitHub Issue ที่กรอกไว้แล้ว → GitHub Actions เก็บลง branch data
+// ---------------------------------------------------------------------------
+function bangkokNow() {
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Bangkok" }).slice(0, 16);   // "YYYY-MM-DD HH:MM"
+}
+function reportTarget() {
+  if (state.gps) return { name: "ตำแหน่ง GPS", lat: state.gps.lat, lon: state.gps.lon };
+  const l = state.index.locations[state.locIdx];
+  return { name: l.name, lat: l.lat, lon: l.lon };
+}
+function report(rained) {
+  const t = reportTarget(), time = bangkokNow();
+  const u = new URL(`https://github.com/${state.index.repo}/issues/new`);
+  u.searchParams.set("template", "rain.yml");
+  u.searchParams.set("labels", "rain-obs");
+  u.searchParams.set("title", `${rained ? "🌧️ ฝนตก" : "☀️ ฝนไม่ตก"} · ${t.name} · ${time}`);
+  u.searchParams.set("rain", rained ? "ตก" : "ไม่ตก");
+  u.searchParams.set("location", t.name);
+  u.searchParams.set("coords", `${t.lat.toFixed(5)}, ${t.lon.toFixed(5)}`);
+  u.searchParams.set("time", time);
+  window.open(u.toString(), "_blank", "noopener");
+}
+function initRainBar() {
+  if (!state.index.repo) return;           // ดูในเครื่อง (ไม่มี repo) ก็ไม่แสดง
+  $("rainbar").hidden = false;
+  $("rb-rain").onclick = () => report(true);
+  $("rb-dry").onclick = () => report(false);
+  $("rb-gps").onclick = () => {
+    if (!navigator.geolocation) { $("rb-gps").textContent = "📍 ไม่รองรับ GPS"; return; }
+    $("rb-gps").textContent = "📍 กำลังหา…";
+    navigator.geolocation.getCurrentPosition(
+      (p) => { state.gps = { lat: p.coords.latitude, lon: p.coords.longitude }; $("rb-gps").textContent = "📍 ใช้ GPS แล้ว"; renderRainBar(); },
+      () => { $("rb-gps").textContent = "📍 เปิด GPS ไม่ได้"; },
+      { enableHighAccuracy: true, timeout: 15000 });
+  };
+}
+function renderRainBar() {
+  if ($("rainbar").hidden) return;
+  const t = reportTarget();
+  $("rb-loc").textContent = state.gps ? `ตำแหน่ง GPS (${t.lat.toFixed(4)}, ${t.lon.toFixed(4)})` : t.name;
+  if (!state.gps) $("rb-gps").textContent = "📍 ใช้ GPS";
+  const o = state.index.observations || { count: 0, recent: [] };
+  const last = o.recent[0];
+  $("rb-hint").textContent = "กดแล้วจะเปิดฟอร์มบน GitHub ที่กรอกไว้ให้ → กด “Create” (หรือ Submit) เพื่อยืนยัน" +
+    (o.count ? ` · บันทึกแล้ว ${o.count} ครั้ง (ตก ${o.rain}) · ล่าสุด ${last.rained ? "🌧️" : "☀️"} ${last.location} ${last.obs_time.slice(5, 16)}` : "");
 }
 
 // ---------------------------------------------------------------------------

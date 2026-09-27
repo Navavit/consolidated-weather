@@ -21,6 +21,18 @@
   </header>
 
   <main class="wrap">
+    <section class="rainbar" id="rainbar" aria-labelledby="rb-q" hidden>
+      <div class="rb-top">
+        <p id="rb-q" class="rb-q">ตอนนี้ฝนตกไหม ที่ <b id="rb-loc">…</b></p>
+        <button id="rb-gps" class="ghost small" type="button">📍 ใช้ GPS</button>
+      </div>
+      <div class="rb-btns">
+        <button id="rb-rain" class="big rain" type="button">🌧️ ตก</button>
+        <button id="rb-dry" class="big dry" type="button">☀️ ไม่ตก</button>
+      </div>
+      <p class="rb-hint" id="rb-hint"></p>
+    </section>
+
     <nav class="filters" aria-label="ตัวกรอง">
       <div class="chips" id="locations" role="tablist" aria-label="ตำแหน่ง"></div>
       <label class="select">

@@ -1,0 +1,52 @@
+# อ่าน issue "บันทึกฝน" (จากปุ่ม 🌧️/☀️ บนหน้าเว็บ) → เก็บลง branch data → ตอบกลับและปิด issue
+# รับเฉพาะ issue ของเจ้าของ repo เพื่อกันคนอื่นส่งข้อมูลปลอม
+name: บันทึกฝนจาก issue
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: data-branch
+  cancel-in-progress: false
+
+jobs:
+  record:
+    if: contains(github.event.issue.labels.*.name, 'rain-obs') && github.event.issue.author_association == 'OWNER'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - run: scripts/data_worktree.sh
+
+      - name: อ่านฟอร์ม
+        run: python collector.py observe-issue --event "$GITHUB_EVENT_PATH" --out archive | tee result.md
+
+      - name: บันทึกลง branch data
+        run: scripts/push_data.sh "observation #$ISSUE"
+
+      - name: ตอบกลับและปิด issue
+        run: |
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file result.md
+          gh issue close "$ISSUE" --repo "$GITHUB_REPOSITORY" --reason completed
+
+      - name: แจ้งเมื่อบันทึกไม่สำเร็จ
+        if: failure()
+        run: |
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" \
+            --body "⚠️ บันทึกไม่สำเร็จ — ตรวจช่อง \"ฝนตกไหม\" (ตก/ไม่ตก), พิกัด และเวลา แล้วแก้ issue นี้หรือส่งใหม่ (ดู log ที่แท็บ Actions)"

@@ -108,7 +108,20 @@ def write_site(results, out_dir, cfg=None):
         "generated": pd.Timestamp.now(tz="Asia/Bangkok").isoformat(timespec="minutes"),
         "repo": repo,
         "locations": index,
+        "observations": observations_summary(),
     }
     (out / "data" / "index.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     (out / ".nojekyll").write_text("")
     return out
+
+
+def observations_summary(archive=core.ROOT / "archive", last=5):
+    """สรุปการบันทึกฝนจากปุ่มบนหน้าเว็บ (อ่านจาก branch data ที่ checkout ไว้ที่ archive/)"""
+    files = sorted((Path(archive) / "observations").glob("*.json"))
+    recs = [json.loads(f.read_text(encoding="utf-8")) for f in files]
+    recs.sort(key=lambda o: o["obs_time"])
+    return {
+        "count": len(recs),
+        "rain": sum(bool(o["rained"]) for o in recs),
+        "recent": [{k: o.get(k) for k in ("obs_time", "location", "rained", "amount_mm")} for o in recs[-last:][::-1]],
+    }

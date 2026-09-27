@@ -1,0 +1,41 @@
+# ฟอร์มบันทึกว่าฝนตกหรือไม่ — ปุ่ม 🌧️/☀️ บนหน้าเว็บจะเปิดฟอร์มนี้พร้อมกรอกข้อมูลให้แล้ว
+# workflow "บันทึกฝนจาก issue" จะอ่านแล้วเก็บลง branch data และปิด issue ให้เอง (รับเฉพาะเจ้าของ repo)
+name: บันทึกฝน
+description: บันทึกว่าฝนตกหรือไม่ ณ ตำแหน่งและเวลาหนึ่ง
+title: "ฝน: "
+labels: ["rain-obs"]
+body:
+  - type: input
+    id: rain
+    attributes:
+      label: ฝนตกไหม
+      description: พิมพ์ "ตก" หรือ "ไม่ตก"
+      placeholder: ตก
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: ตำแหน่ง
+      placeholder: ต.ประตูชัย อ.พระนครศรีอยุธยา
+  - type: input
+    id: coords
+    attributes:
+      label: พิกัด
+      description: "lat, lon หรือลิงก์ Google Maps (ถ้าเว้นว่าง จะใช้พิกัดของตำแหน่งที่ชื่อตรงกันใน config.json)"
+      placeholder: "14.3505, 100.5606"
+  - type: input
+    id: time
+    attributes:
+      label: เวลา
+      description: "เวลาไทย เช่น 2026-09-27 14:30 (ถ้าเว้นว่าง จะใช้เวลาที่ส่งฟอร์ม)"
+  - type: input
+    id: amount
+    attributes:
+      label: ปริมาณฝน (มม.)
+      description: ไม่บังคับ ใส่ถ้ามีเครื่องวัด
+  - type: input
+    id: note
+    attributes:
+      label: หมายเหตุ
+      placeholder: เช่น ตกหนักมาก 20 นาที
