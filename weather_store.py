@@ -96,6 +96,7 @@ def snapshot_frame(result, cfg=None):
     keep_from = fetched_at - pd.Timedelta(hours=int(cfg["verify_window_hours"]) + 1)
 
     cols = {f"det_mm|{m}": s for m, s in result["data"]["precipitation"].items()}
+    cols.update({f"det_t|{m}": s for m, s in result["data"].get("temperature_2m", pd.DataFrame()).items()})   # อุณหภูมิ ใช้เทียบสถานี
     thr = cfg["verify_threshold_mm"]
     for name, members in result.get("ensembles", {}).items():
         ws = window_sum(members, cfg)
@@ -144,9 +145,14 @@ def export_snapshot(result, export_dir, cfg=None):
     return path, int(wide.notna().sum().sum())
 
 
-def import_archive(archive_dir, cfg=None):
-    """นำเข้าไฟล์ .csv.gz จาก GitHub (branch data) ลง SQLite ข้ามไฟล์ที่เคยนำเข้าแล้ว"""
+def import_archive(archive_dir, cfg=None, since=None):
+    """นำเข้าไฟล์ .csv.gz จาก GitHub (branch data) ลง SQLite ข้ามไฟล์ที่เคยนำเข้าแล้ว
+
+    since="YYYYmmdd" นำเข้าเฉพาะรอบตั้งแต่วันนั้น
+    """
     files = sorted(Path(archive_dir).glob("runs/**/*.csv.gz"))
+    if since:
+        files = [f for f in files if f.name[:8] >= since]
     n_new = n_obs = 0
     with closing(connect(cfg)) as con, con:
         done = {r[0] for r in con.execute("SELECT path FROM imported_files")}

@@ -12,3 +12,4 @@ scripts/*.plist
 __pycache__/
 .ipynb_checkpoints/
 .DS_Store
+.verify_tmp.db

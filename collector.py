@@ -28,6 +28,13 @@ import weather_store as store
 def cmd_run(args):
     log = store.collect_all(export_dir=getattr(args, "export_dir", None), to_db=not getattr(args, "no_db", False),
                             site_dir=getattr(args, "site_dir", None))
+    if getattr(args, "export_dir", None):
+        # วัดความแม่นอัตโนมัติด้วยค่าวัดจากสถานี (เก็บลง branch data เดียวกัน)
+        import weather_verify
+        try:
+            weather_verify.update(args.export_dir, core.resolve_locations(), site_dir=getattr(args, "site_dir", None))
+        except Exception as e:
+            print(f"⚠️ verification: {e}")
     print(pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"))
     print(log.to_string(index=False))
     return 0 if (log.status == "ok").all() else 1

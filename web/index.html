@@ -65,6 +65,27 @@
       <div class="tiles" id="next"></div>
     </section>
 
+    <section aria-labelledby="h-verify">
+      <h2 id="h-verify">🏆 โมเดลไหนแม่น <small id="v-sub">เทียบกับค่าที่วัดได้จริง</small></h2>
+      <div class="v-controls">
+        <label class="select"><span>เทียบกับ</span><select id="v-section"></select></label>
+        <div class="chips" id="v-leads" role="tablist" aria-label="ช่วงเวลาล่วงหน้า"></div>
+      </div>
+      <div class="table-wrap" id="v-table"></div>
+      <div class="table-wrap v-ens" id="v-ens"></div>
+      <p class="note" id="v-note"></p>
+      <details class="v-help">
+        <summary>วิธีอ่านคะแนน และจุดตรวจที่ใช้</summary>
+        <ul>
+          <li><b>CSI</b> — ทายว่าตกแล้วตกจริง เทียบกับทุกครั้งที่ตกจริงหรือทายว่าตก (ยิ่งสูงยิ่งดี ไม่ถูกหลอกด้วยวันที่ไม่ตก)</li>
+          <li><b>ทายถูก</b> — ตก/ไม่ตก ถูกกี่ % · <b>POD</b> — ฝนตกจริงแล้วทายถูกกี่ % · <b>FAR</b> — ทายว่าตกแต่ไม่ตกกี่ % (ต่ำดี)</li>
+          <li><b>Bias</b> — &gt;1 ทายว่าตกบ่อยเกิน, &lt;1 ทายว่าตกน้อยเกิน · <b>MAE</b> — คลาดเคลื่อนเฉลี่ย (มม. หรือ °C, ต่ำดี) · <b>Brier</b> — ความคลาดของ “โอกาสฝน” จาก ensemble (0 = สมบูรณ์)</li>
+          <li>จัดอันดับแยกตามช่วงเวลาล่วงหน้า เพราะแต่ละโมเดลพยากรณ์ได้ไกลไม่เท่ากัน · ดูค่า <b>n</b> ประกอบเสมอ ยิ่งมากยิ่งเชื่อถือได้</li>
+        </ul>
+        <div id="v-points"></div>
+      </details>
+    </section>
+
     <section aria-labelledby="h-rain">
       <h2 id="h-rain">ฝนแยกโมเดล (มม.) <small>เรียงจากโมเดลละเอียดสูงไปหยาบ</small></h2>
       <div class="table-wrap" id="rain-table"></div>

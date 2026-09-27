@@ -136,6 +136,9 @@ async function init() {
   }
   $("updated").textContent = `อัปเดต ${timeAgo(state.index.generated)} · ${new Date(state.index.generated).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}`;
   initRainBar();
+  getJSON("data/verification.json").then((v) => { state.verify = v; renderVerify(); }).catch(() => {
+    $("v-note").textContent = "ยังไม่มีข้อมูล — ระบบเริ่มเก็บค่าวัดจากสถานีแล้ว ผลจะเริ่มแสดงในไม่กี่ชั่วโมง";
+  });
   const saved = parseInt(store.get("loc") || "0", 10);
   renderChips();
   initMap();
@@ -324,6 +327,72 @@ function renderNow() {
   fetchCurrent(L.lat, L.lon)
     .then((c) => { if (state.locIdx === idx) $("now-model").replaceWith(modelCard(c)); })
     .catch(() => { if (state.locIdx === idx) $("now-model").replaceWith(modelCard({ error: true })); });
+}
+
+// ---------------------------------------------------------------------------
+// โมเดลไหนแม่น: คะแนนจากการเทียบกับค่าวัดจริง (data/verification.json)
+// ---------------------------------------------------------------------------
+const V_EMPTY = {
+  tmd3h_rain: "ต้องมีพยากรณ์ที่ออกก่อนเวลาวัดอย่างน้อย 3 ชม. สถานีวัดทุก 3 ชม. — ผลแรกจะมาภายในวันนี้",
+  tmd3h_temp: "ผลแรกจะมาภายในไม่กี่ชั่วโมง (สถานีวัดทุก 3 ชม.)",
+  thaiwater24h_rain: "ใช้ฝน 24 ชม. ถึง 07 น. ที่พยากรณ์ไว้ก่อนเริ่มช่วงนั้น — ผลแรกจะมาภายใน 2 วัน",
+  user_rain: "ยังไม่มีการกดปุ่ม 🌧️/☀️ ด้านบน",
+};
+function renderVerify() {
+  const V = state.verify;
+  if (!V) return;
+  const secs = V.sections;
+  const saved = store.get("v-section");
+  const pick = secs.find((x) => x.id === (state.vSection || saved)) || secs.find((x) => x.n_obs) || secs[0];
+  state.vSection = pick.id;
+  $("v-section").replaceChildren(...secs.map((x) =>
+    el("option", { value: x.id, selected: x.id === pick.id }, `${x.title}${x.n_obs ? "" : " (กำลังสะสมข้อมูล)"}`)));
+  $("v-section").onchange = (e) => { state.vSection = e.target.value; state.vLead = null; store.set("v-section", e.target.value); renderVerify(); };
+  $("v-sub").textContent = `${V.days} วันล่าสุด · เริ่มเก็บ ${V.since || "วันนี้"} · อัปเดต ${timeAgo(V.updated)}`;
+
+  const lead = pick.leads.includes(state.vLead) ? state.vLead : pick.leads[0];
+  state.vLead = lead;
+  $("v-leads").replaceChildren(...pick.leads.map((l) =>
+    el("button", { class: "chip", role: "tab", type: "button", "aria-selected": String(l === lead),
+      onclick: () => { state.vLead = l; renderVerify(); } }, `ล่วงหน้า ${l}`)));
+
+  const rows = (pick.tables || {})[lead] || [];
+  if (!rows.length) {
+    $("v-table").replaceChildren(el("div", { class: "empty" }, `⏳ กำลังสะสมข้อมูล — ${V_EMPTY[pick.id] || "รอผลรอบแรก"}`));
+    $("v-ens").replaceChildren();
+  } else {
+    const rain = pick.variable === "rain";
+    const cols = rain
+      ? [["csi", "CSI %"], ["acc", "ทายถูก %"], ["pod", "POD %"], ["far", "FAR %"], ["bias", "Bias"], ["mae", "MAE มม."], ["n", "n"]]
+      : [["mae", "MAE °C"], ["bias", "Bias °C"], ["rmse", "RMSE °C"], ["n", "n"]];
+    const worst = Math.max(...rows.map((r) => r.mae || 0), 1);
+    const meter = (r) => rain
+      ? el("span", { class: "meter", "aria-hidden": "true" }, el("i", { style: `width:${r.csi ?? 0}%` }))
+      : el("span", { class: "meter", "aria-hidden": "true" }, el("i", { style: `width:${Math.max(4, 100 - (r.mae / worst) * 100)}%` }));
+    const table = el("table", {},
+      el("thead", {}, el("tr", {}, el("th", {}, "#"), el("th", { style: "text-align:left" }, "โมเดล"),
+        ...cols.map(([, h]) => el("th", { scope: "col" }, h)))),
+      el("tbody", {}, rows.map((r, i) => el("tr", { class: r.model === state.highlight ? "accent" : null },
+        el("td", { class: "rank" }, i + 1),
+        el("th", { scope: "row" }, r.model, r.grid_km ? el("span", { class: "km" }, `${r.grid_km} กม.`) : null, meter(r)),
+        ...cols.map(([k]) => el("td", { class: "num" }, r[k] == null ? "–" : fmt(r[k], k === "n" ? 0 : k === "bias" && rain ? 2 : 1)))))));
+    $("v-table").replaceChildren(table);
+    const ens = (pick.ens_tables || {})[lead] || [];
+    $("v-ens").replaceChildren(...(ens.length ? [el("table", {},
+      el("thead", {}, el("tr", {}, el("th", { style: "text-align:left" }, "Ensemble (โอกาสฝน)"),
+        ...["Brier (ต่ำดี)", "ทายถูก %", "POD %", "FAR %", "n"].map((h) => el("th", {}, h)))),
+      el("tbody", {}, ens.map((r) => el("tr", {}, el("th", { scope: "row" }, r.model),
+        ...["brier", "acc", "pod", "far", "n"].map((k) => el("td", { class: "num" }, r[k] == null ? "–" : fmt(r[k], k === "brier" ? 3 : k === "n" ? 0 : 1)))))))] : []));
+  }
+  const thr = pick.variable !== "rain" ? "" : pick.source === "tmd3h" || pick.source === "user"
+    ? " · นับว่า “ฝนตก” เมื่อ ≥ 0.2 มม." : " · นับว่า “ฝนตก” เมื่อ ≥ 1 มม./วัน";
+  $("v-note").textContent = pick.n_obs
+    ? `ค่าวัด ${pick.n_obs.toLocaleString("th-TH")} ครั้ง จาก ${pick.n_points} จุด${thr} · เรียงจากแม่นที่สุด`
+    : "";
+  const pts = V.points || [];
+  $("v-points").replaceChildren(el("b", {}, "จุดตรวจใกล้ตำแหน่งของคุณ:"),
+    el("ul", {}, pts.map((p) => el("li", {}, `${p.for} → ${p.name} (ห่าง ${fmt(p.dist_km)} กม.)`))),
+    el("div", {}, "ทั่วประเทศ: สถานีอุตุฯ ~124 แห่ง (สรุป 07.00 น.) เทียบพยากรณ์ล่วงหน้า 1, 3, 7 วันจาก Open-Meteo Previous Runs"));
 }
 
 // ---------------------------------------------------------------------------
