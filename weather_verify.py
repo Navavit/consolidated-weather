@@ -90,7 +90,10 @@ def load_obs(archive, kind, days=LOOKBACK_DAYS + 5):
 def verification_points(archive, locations, tmd3h, thaiwater, cfg=None):
     cfg = cfg or core.CFG
     path = Path(archive) / "verification" / "points.json"
-    pts = {p["key"]: p for p in (json.loads(path.read_text(encoding="utf-8")) if path.exists() else [])}
+    current = {name for *_, name in locations}
+    # ตำแหน่งที่ถูกลบออกจาก config แล้ว ไม่ต้องเก็บจุดตรวจต่อ (ประวัติคะแนนเดิมยังอยู่ใน pairs)
+    pts = {p["key"]: p for p in (json.loads(path.read_text(encoding="utf-8")) if path.exists() else [])
+           if p.get("for") in current}
     per_loc = int(cfg.get("gauges_per_location", 1))
     for lat, lon, name in locations:
         s = weather_now.nearest(lat, lon, tmd3h)
@@ -110,12 +113,19 @@ def verification_points(archive, locations, tmd3h, thaiwater, cfg=None):
     return list(pts.values())
 
 
-def collect_points(points, archive, cfg=None):
-    """ดึงพยากรณ์ที่พิกัดจุดตรวจ (ensemble เฉพาะสถานีอุตุฯ เพราะใช้กับฝน 3 ชม.)"""
+def collect_points(points, archive, cfg=None, google_for=None):
+    """ดึงพยากรณ์ที่พิกัดจุดตรวจ (ensemble เฉพาะสถานีอุตุฯ เพราะใช้กับฝน 3 ชม.)
+
+    google_for = ชื่อตำแหน่งของฉัน: จุดตรวจของตำแหน่งนี้ดึง Google Weather 48 ชม. ทุก 2 ชม.
+    """
     log = []
     for p in points:
+        gkey = f"pt:{p['key']}"
+        google = 48 if p.get("for") == google_for and core.google_allowed(archive, gkey, 110, cfg) else None
         try:
-            data, now, tz = core.fetch_deterministic(p["lat"], p["lon"], cfg)
+            data, now, tz = core.fetch_deterministic(p["lat"], p["lon"], cfg, google)
+            if google:
+                core.google_record(archive, gkey, core.GOOGLE_CALLS["last"])
             ens = core.fetch_all_ensembles(p["lat"], p["lon"], cfg) if p["kind"] == "tmd" else {}
             result = {"name": p["name"], "lat": p["lat"], "lon": p["lon"], "tz": tz, "now": now,
                       "data": data, "ensembles": ens}
@@ -383,14 +393,17 @@ def _temp_scores(g):
 def leaderboard(archive, days=30, cfg=None):
     """ตารางอันดับทุกส่วน (สำหรับหน้าเว็บและ notebook)"""
     pairs = load_pairs(archive, days)
-    meta = {m["name"]: m.get("grid_km") for m in list(core.DETERMINISTIC_MODELS.values()) + [core.TMD_MODEL]}
+    meta = {m["name"]: m.get("grid_km") for m in list(core.DETERMINISTIC_MODELS.values()) + [core.TMD_MODEL, core.GOOGLE_MODEL]}
     points_path = Path(archive) / "verification" / "points.json"
     points = json.loads(points_path.read_text(encoding="utf-8")) if points_path.exists() else []
     out = {"updated": pd.Timestamp.now(tz="Asia/Bangkok").isoformat(timespec="minutes"), "days": days,
            "since": None if pairs.empty else str(pairs["obs_time"].min())[:10],
            "points": points, "sections": []}
+    current_points = {p["name"] for p in points}
     for sid, spec in SECTIONS.items():
         g = pairs[(pairs["source"] == spec["source"]) & (pairs["variable"] == spec["variable"])] if not pairs.empty else pairs
+        if spec["source"] in ("tmd3h", "thaiwater24h") and not g.empty:
+            g = g[g["point"].isin(current_points)]          # เฉพาะจุดตรวจของตำแหน่งที่ยังอยู่ใน config
         # จัดอันดับแยกตามช่วงเวลาล่วงหน้า: แต่ละโมเดลพยากรณ์ไปได้ไกลไม่เท่ากัน ถ้ารวมทุกช่วง
         # โมเดลที่มีแค่ช่วงสั้น (ซึ่งง่ายกว่า) จะได้คะแนนสูงเกินจริง
         sec = {"id": sid, **spec, "n_obs": 0, "n_points": 0, "leads": [], "tables": {}, "ens_tables": {}}
@@ -447,7 +460,7 @@ def update(archive, locations, cfg=None, site_dir=None):
     archive_obs(archive, obs["tmdday"], "tmdday")
     tw_ids = {p["id"] for p in points if p["kind"] == "tw"}
     archive_obs(archive, [g for g in obs["thaiwater"] if g["id"] in tw_ids], "thaiwater")
-    log = collect_points(points, archive, cfg)
+    log = collect_points(points, archive, cfg, google_for=locations[0][2] if locations else None)
     print(log.to_string(index=False))
     n = 0
     for fn in (pairs_tmd3h, pairs_thaiwater24h, pairs_national, pairs_user):

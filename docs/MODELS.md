@@ -51,7 +51,6 @@ Open-Meteo รับข้อมูลเปิด (open data) จากหน�
 ### ทางเลือกอื่นที่ยังไม่ได้เชื่อมต่อ
 | แหล่ง | หมายเหตุ |
 |---|---|
-| Google Weather API (Maps Platform) | พยากรณ์ของ Google เอง รายชั่วโมง 10 วัน ต้องมี API key และเปิด billing (มีโควตาฟรี) |
 | Google DeepMind WeatherNext 3 | 0.1° (~10 กม.) รายชั่วโมง 15 วัน ensemble 64 สมาชิก ผ่าน BigQuery / Earth Engine / GCS ต้องขอสิทธิ์ (allowlist) และมีโปรเจกต์ Google Cloud |
 | สสน. (HII) WRF-ROMS | 3 กม. ล่วงหน้า 3 วัน / 9 กม. ล่วงหน้า 7 วัน รันวันละ 2 รอบ แต่เผยแพร่บน [thaiwater.net](https://tiwrm.hii.or.th/v3/wrfroms/rain_forecast) เป็น **ภาพแผนที่** ยังไม่พบ API ที่ให้ค่าตัวเลข |
 | TMD ข้อมูลสถานีตรวจวัด | ฝนที่วัดได้จริง ใช้เป็น "ค่าจริง" สำหรับตรวจสอบได้ (สมัครที่ `data.tmd.go.th/api`) |
@@ -136,6 +135,12 @@ Open-Meteo รับข้อมูลเปิด (open data) จากหน�
 **2. ECMWF AIFS (Artificial Intelligence Forecasting System)**
 โมเดล AI ของ ECMWF ใช้งานจริงตั้งแต่ปี 2025 โครงสร้างเป็น **graph neural network (encoder/decoder) + transformer** ฝึกด้วยข้อมูล ERA5 reanalysis และ analysis ของ IFS
 เริ่มจากสภาพตั้งต้นของ IFS แล้วทำนายทีละ 6 ชม. ใช้เปรียบเทียบได้ดีว่า "AI กับฟิสิกส์ต่างกันแค่ไหน" ในพื้นที่ของคุณ
+
+**Google Weather (Google Maps Platform Weather API)** — *ไม่บังคับ ต้องมี API key*
+พยากรณ์สำเร็จรูปของ Google (ตัวเดียวกับที่แสดงใน Google Search/Maps) ใช้โมเดล AI ของ Google (ตระกูล WeatherNext) ร่วมกับข้อมูลอื่น
+Google ไม่เปิดเผยความละเอียดกริด ได้ฝน (ปริมาณ + โอกาส), โอกาสพายุฝนฟ้าคะนอง, อุณหภูมิ, รู้สึกเหมือน, ความชื้น, ลม/ลมกระโชก, เมฆ, UV รายชั่วโมง 240 ชม.
+ราคา: SKU "Weather Usage" ฟรี 10,000 ครั้ง/เดือน แล้วจึง $0.15/1,000 ครั้ง · ระบบนี้ใช้เฉพาะตำแหน่งของฉันและจุดตรวจ 2 จุด ≈ 8,900 ครั้ง/เดือน
+ฝนของ Google เป็นปริมาณในช่วง [startTime, endTime) ระบบจึงวางไว้ที่ endTime ให้ตรงกับรูปแบบของ Open-Meteo · ไม่อยู่ในส่วนเทียบทั่วประเทศ (ไม่มีพยากรณ์ย้อนหลัง)
 
 **NOAA AIGFS / AIGEFS (AI Global Forecast System)**
 NOAA นำสถาปัตยกรรม **GraphCast ของ Google DeepMind** (graph neural network) มาฝึกต่อด้วยข้อมูลของ NOAA แล้วรันเป็นระบบปฏิบัติการคู่กับ GFS

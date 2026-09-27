@@ -37,6 +37,7 @@ jobs:
       - name: ดึงข้อมูล
         env:
           TMD_NWP_TOKEN: ${{ secrets.TMD_NWP_TOKEN }}
+          GOOGLE_WEATHER_API_KEY: ${{ secrets.GOOGLE_WEATHER_API_KEY }}   # ว่างได้ ถ้ายังไม่ตั้ง จะข้าม Google
         run: python collector.py run --export-dir archive --no-db --site-dir site
 
       - name: บันทึกลง branch data

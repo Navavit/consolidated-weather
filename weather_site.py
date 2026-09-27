@@ -20,7 +20,7 @@ import weather_now
 WEB_DIR = core.ROOT / "web"
 HOURLY_DAYS = 7
 HOURLY_VARS = ["precipitation", "temperature_2m", "apparent_temperature", "relative_humidity_2m", "wind_gusts_10m"]
-MODEL_META = {m["name"]: m for m in list(core.DETERMINISTIC_MODELS.values()) + [core.TMD_MODEL]}
+MODEL_META = {m["name"]: m for m in list(core.DETERMINISTIC_MODELS.values()) + [core.TMD_MODEL, core.GOOGLE_MODEL]}
 
 
 def _num(v, nd=1):

@@ -22,6 +22,7 @@ AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 PREVIOUS_RUNS_URL = "https://previous-runs-api.open-meteo.com/v1/forecast"
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 TMD_HOURLY_URL = "https://data.tmd.go.th/nwpapi/v1/forecast/location/hourly/at"
+GOOGLE_HOURLY_URL = "https://weather.googleapis.com/v1/forecast/hours:lookup"
 
 # ลองใหม่อัตโนมัติเมื่อ timeout / 429 / 5xx (Open-Meteo ensemble ช้าช่วงต้นชั่วโมง) รอ 0, 10, 20 วินาที
 SESSION = requests.Session()
@@ -44,6 +45,8 @@ DEFAULT_CONFIG = {
     "db_path": "data/weather.db",
     "max_grid_km": None,                   # ตัดโมเดลที่กริดหยาบกว่านี้ออก เช่น 20 (None = ใช้ทุกโมเดล)
     "tmd_token": "",                       # ใส่ใน config.local.json หรือ env TMD_NWP_TOKEN (ห้ามใส่ใน config.json)
+    "google_weather_api_key": "",          # ใส่ใน config.local.json หรือ env GOOGLE_WEATHER_API_KEY (ห้ามใส่ใน config.json)
+    "google_monthly_cap": 9500,            # เพดานจำนวนครั้ง/เดือน (โควตาฟรี 10,000) — ถึงแล้วหยุดเรียก Google
 }
 
 
@@ -86,7 +89,11 @@ DETERMINISTIC_MODELS = {
 TMD_MODEL = {"name": "TMD WRF", "agency": "กรมอุตุนิยมวิทยา (ไทย)", "type": "Physics (regional)",
              "grid_km": 2, "grid": "2 กม. (hourly, 48 ชม.)"}
 
-MODEL_NAMES = [m["name"] for m in DETERMINISTIC_MODELS.values()] + [TMD_MODEL["name"]]
+# Google Weather API (Maps Platform) — เฉพาะตำแหน่งของฉัน เพื่ออยู่ในโควตาฟรี (ต้องมี API key)
+GOOGLE_MODEL = {"name": "Google Weather", "agency": "Google (Maps Platform · WeatherNext)", "type": "AI/ML",
+                "grid_km": None, "grid": "ไม่เปิดเผย (รายชั่วโมง 10 วัน)"}
+
+MODEL_NAMES = [m["name"] for m in DETERMINISTIC_MODELS.values()] + [TMD_MODEL["name"], GOOGLE_MODEL["name"]]
 
 # ระบบ ensemble (หลายสมาชิก ใช้คำนวณความน่าจะเป็น)
 ENSEMBLE_MODELS = {
@@ -132,12 +139,17 @@ def tmd_token(cfg=None):
     return os.environ.get("TMD_NWP_TOKEN") or (cfg or CFG).get("tmd_token") or ""
 
 
+def google_key(cfg=None):
+    return os.environ.get("GOOGLE_WEATHER_API_KEY") or (cfg or CFG).get("google_weather_api_key") or ""
+
+
 def model_table(cfg=None):
     """ตารางโมเดลทั้งหมด เรียงตามความละเอียด พร้อมสถานะว่าใช้อยู่หรือไม่"""
     act = active_models(cfg)
     rows = [{"open_meteo_key": k, **m, "ใช้งาน": k in act} for k, m in DETERMINISTIC_MODELS.items()]
     rows.append({"open_meteo_key": "(TMD NWP API)", **TMD_MODEL, "ใช้งาน": bool(tmd_token(cfg))})
-    return pd.DataFrame(rows).set_index("name").sort_values("grid_km")
+    rows.append({"open_meteo_key": "(Google Weather API)", **GOOGLE_MODEL, "ใช้งาน": bool(google_key(cfg))})
+    return pd.DataFrame(rows).set_index("name").sort_values("grid_km", na_position="last")
 
 
 def forecast_days(cfg=None):
@@ -236,7 +248,7 @@ def _local_now(utc_offset_seconds):
     return (pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(seconds=utc_offset_seconds)).floor("h")
 
 
-def fetch_deterministic(lat, lon, cfg=None):
+def fetch_deterministic(lat, lon, cfg=None, google_hours=None):
     """คืน (dict[api_var -> DataFrame(index=เวลาท้องถิ่น, columns=ชื่อโมเดล)], now_local, timezone)"""
     r = SESSION.get(FORECAST_URL, params={
         "latitude": lat, "longitude": lon,
@@ -264,7 +276,112 @@ def fetch_deterministic(lat, lon, cfg=None):
                     data[var].insert(0, TMD_MODEL["name"], series.reindex(data[var].index))   # ละเอียดสุด ไว้คอลัมน์แรก
         except Exception as e:                         # TMD ล่มหรืออยู่นอกประเทศไทย ก็ยังใช้โมเดลอื่นต่อได้
             print(f"⚠️ TMD WRF: {e}")
+
+    GOOGLE_CALLS["last"] = 0
+    if google_hours and google_key(cfg):
+        try:
+            g, calls = fetch_google_hourly(lat, lon, google_hours, j["timezone"], cfg)
+            GOOGLE_CALLS["last"] = calls
+            pos = 1 if TMD_MODEL["name"] in data["precipitation"] else 0
+            for var, series in g.items():
+                if var in data:
+                    data[var].insert(min(pos, data[var].shape[1]), GOOGLE_MODEL["name"], series.reindex(data[var].index))
+        except Exception as e:
+            print(f"⚠️ Google Weather: {e}")
     return data, now, j["timezone"]
+
+
+GOOGLE_CALLS = {"last": 0, "page_hint": None, "page_used": None}   # สถานะการเรียก Google ล่าสุด (ใช้บันทึกงบ)
+
+
+def fetch_google_hourly(lat, lon, hours, tz, cfg=None):
+    """Google Weather API รายชั่วโมง → (dict[api_var แบบ Open-Meteo -> Series(เวลาท้องถิ่น)], จำนวนครั้งที่เรียก)
+
+    ฝน (qpf) เป็นปริมาณในช่วง [startTime, endTime) จึงวางไว้ที่ endTime ให้ตรงกับ Open-Meteo (ฝนของชั่วโมงก่อนหน้า)
+    ค่าอื่นเป็นค่า ณ startTime
+    """
+    # ขนาดหน้าที่เคยใช้ได้ (จำไว้ใน google_usage.json) — ไม่ต้องเสียคำขอลองหน้าใหญ่ทุกรอบ
+    rows, token, calls = [], None, 0
+    page = min(int(hours), int(GOOGLE_CALLS.get("page_hint") or hours))
+    while True:
+        params = {"key": google_key(cfg), "location.latitude": lat, "location.longitude": lon,
+                  "hours": int(hours), "pageSize": page}
+        if token:
+            params["pageToken"] = token
+        r = SESSION.get(GOOGLE_HOURLY_URL, params=params, timeout=60)
+        calls += 1
+        if r.status_code == 400 and page > 24 and not rows:
+            page = 24                                   # ถ้าขอหน้าใหญ่ไม่ได้ ใช้ขนาดมาตรฐาน 24 ชม.
+            continue
+        r.raise_for_status()
+        j = r.json()
+        rows += j.get("forecastHours", [])
+        token = j.get("nextPageToken")
+        if not token or len(rows) >= hours:
+            break
+    GOOGLE_CALLS["page_used"] = page
+    to_local = lambda t: pd.Timestamp(t).tz_convert(tz).tz_localize(None).floor("h")
+    get = lambda h, *path: _dig(h, path)
+    start = [to_local(h["interval"]["startTime"]) for h in rows]
+    end = [to_local(h["interval"]["endTime"]) for h in rows]
+    S = lambda idx, vals: pd.Series(vals, index=idx, dtype=float).groupby(level=0).last()
+    out = {
+        "precipitation": S(end, [get(h, "precipitation", "qpf", "quantity") for h in rows]),
+        "precipitation_probability": S(start, [get(h, "precipitation", "probability", "percent") for h in rows]),
+        "temperature_2m": S(start, [get(h, "temperature", "degrees") for h in rows]),
+        "apparent_temperature": S(start, [get(h, "feelsLikeTemperature", "degrees") for h in rows]),
+        "relative_humidity_2m": S(start, [get(h, "relativeHumidity") for h in rows]),
+        "wind_speed_10m": S(start, [get(h, "wind", "speed", "value") for h in rows]),
+        "wind_gusts_10m": S(start, [get(h, "wind", "gust", "value") for h in rows]),
+        "cloud_cover": S(start, [get(h, "cloudCover") for h in rows]),
+        "uv_index": S(start, [get(h, "uvIndex") for h in rows]),
+    }
+    return {k: v for k, v in out.items() if v.notna().any()}, calls
+
+
+def _dig(d, path):
+    for k in path:
+        if not isinstance(d, dict) or k not in d:
+            return None
+        d = d[k]
+    return d
+
+
+# ---------------------------------------------------------------------------
+# งบ Google Weather API: บันทึกเวลาเรียกล่าสุดและจำนวนครั้งต่อเดือนไว้ใน branch data
+# ---------------------------------------------------------------------------
+def google_allowed(archive, key, min_minutes, cfg=None):
+    """เรียก Google ได้ไหม: ห่างจากครั้งก่อนพอ และยังไม่ถึงเพดานรายเดือน"""
+    if not google_key(cfg) or not archive:
+        return False
+    st = _google_state(archive)
+    GOOGLE_CALLS["page_hint"] = st.get("page_size")
+    now = pd.Timestamp.now(tz="Asia/Bangkok")
+    last = st["last"].get(key)
+    if last and now - pd.Timestamp(last) < pd.Timedelta(minutes=min_minutes):
+        return False
+    if st["month"].get(now.strftime("%Y-%m"), 0) >= int((cfg or CFG).get("google_monthly_cap", 9500)):
+        print("⚠️ Google Weather: ถึงเพดานรายเดือนแล้ว หยุดเรียกจนถึงเดือนหน้า")
+        return False
+    return True
+
+
+def google_record(archive, key, calls):
+    if not calls:
+        return
+    st = _google_state(archive)
+    now = pd.Timestamp.now(tz="Asia/Bangkok")
+    st["last"][key] = now.isoformat(timespec="seconds")
+    m = now.strftime("%Y-%m")
+    st["month"][m] = st["month"].get(m, 0) + int(calls)
+    if GOOGLE_CALLS.get("page_used"):
+        st["page_size"] = GOOGLE_CALLS["page_used"]
+    (Path(archive) / "google_usage.json").write_text(json.dumps(st, indent=1), encoding="utf-8")
+
+
+def _google_state(archive):
+    p = Path(archive) / "google_usage.json"
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"last": {}, "month": {}}
 
 
 def fetch_tmd_hourly(lat, lon, now, cfg=None, hours=48):
@@ -510,9 +627,10 @@ def daily_brief(tables, aq, now, cfg=None):
     return pd.DataFrame(rows)
 
 
-def analyze_location(lat, lon, name, cfg=None):
+def analyze_location(lat, lon, name, cfg=None, google_hours=None):
     """ดึงข้อมูลทั้งหมดของตำแหน่งเดียวแล้วสรุปผล"""
-    data, now, tz = fetch_deterministic(lat, lon, cfg)
+    data, now, tz = fetch_deterministic(lat, lon, cfg, google_hours)
+    google_calls = GOOGLE_CALLS["last"]
     try:
         aq = fetch_air_quality(lat, lon, cfg)
     except requests.RequestException as e:
@@ -527,6 +645,7 @@ def analyze_location(lat, lon, name, cfg=None):
         "consensus": consensus(tables["rain"], cfg),
         "ensemble": ensemble_probability(ensembles, now, cfg),
         "brief": daily_brief(tables, aq, now, cfg),
+        "google_calls": google_calls,
     }
 
 

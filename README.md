@@ -55,6 +55,8 @@ pip3 install -r requirements-notebook.txt
 | `verify_window_hours` | `3` | หน้าต่างเวลารอบเวลาที่สังเกต ใช้ตัดสินความแม่น |
 | `verify_threshold_mm` | `0.2` | ฝนในหน้าต่าง ≥ ค่านี้ = โมเดลทายว่าตก |
 | `max_grid_km` | `null` | ตัดโมเดลที่กริดหยาบกว่านี้ออก เช่น `16` = ใช้เฉพาะโมเดล 9–16 กม. |
+| `google_weather_api_key` | – | key ของ Google Weather API **ใส่ใน `config.local.json` หรือ GitHub Secret `GOOGLE_WEATHER_API_KEY` เท่านั้น** |
+| `google_monthly_cap` | `9500` | เพดานจำนวนครั้ง/เดือนของ Google (โควตาฟรี 10,000) ถึงแล้วหยุดเรียกเอง |
 | `tmd_token` | – | token ของ [TMD NWP API](https://data.tmd.go.th/nwpapi/register) สำหรับ **TMD WRF 2 กม.** **ใส่ใน `config.local.json` เท่านั้น** (ไม่ขึ้น GitHub) หรือตั้ง env `TMD_NWP_TOKEN` |
 
 ## ใช้งาน
@@ -105,6 +107,16 @@ python3 collector.py install-launchd --every 60   # macOS: สร้างไฟ
 0 * * * * cd /path/to/Consolidated_Weather && /usr/bin/python3 collector.py run >> logs/collector.log 2>&1
 ```
 ใน notebook ข้อ ⑧ มีปุ่ม **▶️ เริ่มอัปเดตอัตโนมัติ** ซึ่งทำงานเฉพาะตอนที่ notebook เปิดอยู่
+
+### Google Weather API (ไม่บังคับ · อยู่ในโควตาฟรี)
+ใช้กับ **ตำแหน่งของฉันเท่านั้น** เพื่อไม่ให้เกินโควตาฟรี 10,000 ครั้ง/เดือน
+- ตำแหน่งของฉัน: รายชั่วโมง 10 วัน **ทุกชั่วโมง** (≈ 10 ครั้ง × 24 × 31 = 7,440/เดือน)
+- จุดตรวจ 2 จุดของตำแหน่งของฉัน (สถานีอุตุฯ + เครื่องวัดฝน): 48 ชม. **ทุก 2 ชม.** (≈ 2 × 2 × 12 × 31 = 1,488/เดือน)
+- รวม ≈ 8,900/เดือน → **ฟรี** · ระบบบันทึกเวลาเรียกล่าสุดและจำนวนครั้งต่อเดือนใน `google_usage.json` (branch data)
+  กดรัน workflow ซ้ำก็ไม่เรียกเกินกำหนด และหยุดเองเมื่อถึง `google_monthly_cap`
+
+ตั้งค่า: สร้าง API key (Google Cloud → เปิด Weather API + billing) แล้ว `gh secret set GOOGLE_WEATHER_API_KEY`
+แนะนำให้ตั้ง quota ใน Cloud Console ไว้ที่ 300 ครั้ง/วัน และตั้ง budget alert ไว้ด้วย
 
 ### หน้าเว็บ (GitHub Pages)
 workflow `ดึงพยากรณ์อัตโนมัติ` สร้างหน้าเว็บจากผลรอบนั้นและ deploy ขึ้น GitHub Pages ทุกชั่วโมง มีดังนี้

@@ -184,16 +184,16 @@ def import_archive(archive_dir, cfg=None, since=None):
     return n_new, len(files)
 
 
-def collect_location(lat, lon, name, cfg=None, export_dir=None, to_db=True, full=False):
+def collect_location(lat, lon, name, cfg=None, export_dir=None, to_db=True, full=False, google_hours=None):
     """ดึงแล้วบันทึก 1 ตำแหน่ง
 
     full=False ดึงเฉพาะที่ใช้ตรวจสอบย้อนหลัง (ฝน + ensemble)
     full=True  ดึงครบทุกพารามิเตอร์ (ใช้สร้างหน้าเว็บด้วย) และคืนผลวิเคราะห์ใน out["result"]
     """
     if full:
-        result = core.analyze_location(lat, lon, name, cfg)
+        result = core.analyze_location(lat, lon, name, cfg, google_hours)
     else:
-        data, now, tz = core.fetch_deterministic(lat, lon, cfg)
+        data, now, tz = core.fetch_deterministic(lat, lon, cfg, google_hours)
         ens = core.fetch_all_ensembles(lat, lon, cfg)
         result = {"name": name, "lat": lat, "lon": lon, "tz": tz, "now": now, "data": data, "ensembles": ens}
     out = {}
@@ -212,9 +212,15 @@ def collect_all(cfg=None, locations=None, export_dir=None, to_db=True, site_dir=
     cfg = cfg or core.CFG
     locations = locations or core.resolve_locations(cfg)
     log, results = [], []
-    for lat, lon, name in locations:
+    for i, (lat, lon, name) in enumerate(locations):
+        # Google Weather: เฉพาะตำแหน่งของฉัน (ตำแหน่งแรก) ทุกชั่วโมง 10 วัน และเฉพาะรอบที่เก็บลง branch data
+        gkey = f"loc:{lat:.3f},{lon:.3f}"
+        google = 240 if i == 0 and core.google_allowed(export_dir, gkey, 50, cfg) else None
         try:
-            out = collect_location(lat, lon, name, cfg, export_dir, to_db, full=bool(site_dir))
+            out = collect_location(lat, lon, name, cfg, export_dir, to_db, full=bool(site_dir), google_hours=google)
+            if google:
+                core.google_record(export_dir, gkey, core.GOOGLE_CALLS["last"])
+                out["google_calls"] = core.GOOGLE_CALLS["last"]
             if "result" in out:
                 results.append(out.pop("result"))
             log.append({"location": name, **out, "status": "ok"})
