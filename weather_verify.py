@@ -7,7 +7,9 @@
   user         ปุ่ม 🌧️/☀️ บนหน้าเว็บ                      ตก/ไม่ตก               ล่วงหน้า 3 ชม. – 8 วัน
 
 โครงสร้างใน branch data (archive/)
-  obs/tmd3h/YYYY-MM-DD.csv, obs/tmdday/…, obs/thaiwater/…   ค่าวัดที่เก็บทุกชั่วโมง
+  obs/tmd3h/YYYY-MM-DD.csv     ค่าวัดราย 3 ชม. เฉพาะสถานีจุดตรวจ
+  obs/tmdday/YYYY-MM-DD.csv    สรุป 07 น. ทุกสถานีอุตุฯ (~124) ใช้กับส่วนทั่วประเทศ
+  obs/thaiwater/YYYY-MM-DD.csv เครื่องวัดฝนโทรมาตร เฉพาะจุดตรวจ
   verification/points.json                                 จุดตรวจ (สถานีที่ใกล้ตำแหน่งของผู้ใช้) — คงที่เมื่อเลือกแล้ว
   verification/pairs/YYYY-MM.csv.gz                       คู่ (พยากรณ์, ค่าวัด) ทุกโมเดลทุกช่วงเวลาล่วงหน้า
   verification/national_done.json                         วันที่คำนวณ national แล้ว
@@ -455,11 +457,13 @@ def update(archive, locations, cfg=None, site_dir=None):
             print(f"⚠️ ค่าวัด {kind}: {e}")
             obs[kind] = []
     points = verification_points(archive, locations, obs["tmd3h"], obs["thaiwater"], cfg)
-    # เก็บค่าวัด: สถานีอุตุฯ ทั้งหมด, โทรมาตรเฉพาะจุดตรวจ (ทั้งประเทศใหญ่เกินไป)
-    archive_obs(archive, obs["tmd3h"], "tmd3h")
+    # เก็บเท่าที่โครงการใช้: ราย 3 ชม. และโทรมาตร เฉพาะจุดตรวจ, สรุป 07 น. ทุกสถานี (ใช้กับส่วนทั่วประเทศ)
+    # ประวัติย้อนหลังของสถานีอุตุฯ ทั้งประเทศ ดึงเพิ่มได้จาก NOAA GSOD เมื่อต้องการ (docs/MODELS.md)
+    tmd_ids = {str(p["id"]) for p in points if p["kind"] == "tmd"}
+    tw_ids = {str(p["id"]) for p in points if p["kind"] == "tw"}
+    archive_obs(archive, [s for s in obs["tmd3h"] if str(s["id"]) in tmd_ids], "tmd3h")
     archive_obs(archive, obs["tmdday"], "tmdday")
-    tw_ids = {p["id"] for p in points if p["kind"] == "tw"}
-    archive_obs(archive, [g for g in obs["thaiwater"] if g["id"] in tw_ids], "thaiwater")
+    archive_obs(archive, [g for g in obs["thaiwater"] if str(g["id"]) in tw_ids], "thaiwater")
     log = collect_points(points, archive, cfg, google_for=locations[0][2] if locations else None)
     print(log.to_string(index=False))
     n = 0
