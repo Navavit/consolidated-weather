@@ -135,14 +135,19 @@ async function init() {
     $("edit-loc").hidden = true;
   }
   $("updated").textContent = `อัปเดต ${timeAgo(state.index.generated)} · ${new Date(state.index.generated).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}`;
+  const wantAbout = location.hash === "#about";     // อ่านก่อน เพราะการเลือกตำแหน่งจะล้าง hash
   initRainBar();
-  getJSON("data/verification.json").then((v) => { state.verify = v; renderVerify(); }).catch(() => {
+  getJSON("data/verification.json").then((v) => {
+    state.verify = v; renderVerify();
+    if (document.body.classList.contains("about-mode")) showAbout(true);
+  }).catch(() => {
     $("v-note").textContent = "ยังไม่มีข้อมูล — ระบบเริ่มเก็บค่าวัดจากสถานีแล้ว ผลจะเริ่มแสดงในไม่กี่ชั่วโมง";
   });
   const saved = parseInt(store.get("loc") || "0", 10);
   renderChips();
   initMap();
   await selectLocation(saved < state.index.locations.length ? saved : 0);
+  if (wantAbout) showAbout(true);
   let t;
   window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(renderCharts, 150); });
 }
@@ -160,15 +165,59 @@ function renderChips() {
     el("button", { class: "chip", role: "tab", type: "button", "aria-selected": String(i === state.locIdx),
       onclick: () => selectLocation(i) }, l.name)),
     el("button", { class: "chip", id: "gps-chip", role: "tab", type: "button", "aria-selected": String(state.locIdx === -1),
-      onclick: selectGps }, "📍 ตรงที่ฉันอยู่"));
+      onclick: selectGps }, "📍 ตรงที่ฉันอยู่"),
+    el("button", { class: "chip", id: "about-chip", role: "tab", type: "button", "aria-selected": "false",
+      onclick: () => showAbout(true) }, "ℹ️ เกี่ยวกับโครงการ"));
 }
 function markChips() {
-  [...$("locations").children].forEach((c, j) =>
-    c.setAttribute("aria-selected", String(c.id === "gps-chip" ? state.locIdx === -1 : j === state.locIdx)));
-  $("gps-note").hidden = state.locIdx !== -1;
+  const about = document.body.classList.contains("about-mode");
+  [...$("locations").children].forEach((c, j) => c.setAttribute("aria-selected", String(
+    c.id === "about-chip" ? about : !about && (c.id === "gps-chip" ? state.locIdx === -1 : j === state.locIdx))));
+  $("gps-note").hidden = about || state.locIdx !== -1;
+}
+
+// ---------------------------------------------------------------------------
+// ℹ️ เกี่ยวกับโครงการ (แท็บสุดท้าย · ลิงก์ตรงด้วย #about)
+// ---------------------------------------------------------------------------
+async function showAbout(on) {
+  document.body.classList.toggle("about-mode", on);
+  if (on && location.hash !== "#about") history.replaceState(null, "", "#about");
+  if (!on && location.hash === "#about") history.replaceState(null, "", location.pathname);
+  markChips();
+  if (!on) { renderCharts(); return; }
+  window.scrollTo({ top: 0 });
+  const repo = state.index.repo;
+  if (repo) {
+    $("about-docs").href = `https://github.com/${repo}/blob/main/docs/MODELS.md`;
+    $("about-repo").href = `https://github.com/${repo}`;
+  }
+  if (!state.meta) state.meta = await getJSON("data/meta.json").catch(() => null);
+  const M = state.meta;
+  if (M) {
+    const rows = [...M.keyed_models, ...M.models].sort((a, b) => (a.grid_km ?? 99) - (b.grid_km ?? 99));
+    // โมเดลที่มีข้อมูลจริงในรอบล่าสุด (ดูจากตำแหน่งแรกในรายการ)
+    const first = state.index.locations[0];
+    const locData = state.aboutLoc || (state.aboutLoc = await getJSON(`data/${first.file}`).catch(() => null));
+    const avail = new Set((locData?.models || []).map((m) => m.name));
+    const TYPE_TH = { "AI/ML": "AI", "Physics": "ฟิสิกส์", "Physics (regional)": "ฟิสิกส์ (ภูมิภาค)" };
+    $("about-models").replaceChildren(el("table", { class: "about-table" },
+      el("thead", {}, el("tr", {}, ...["โมเดล", "ผู้พัฒนา", "ประเภท", "ความละเอียด"].map((h) => el("th", {}, h)))),
+      el("tbody", {}, rows.map((m) => el("tr", {},
+        el("td", {}, el("b", {}, m.name), avail.size && !avail.has(m.name) ? el("div", { class: "muted" }, "ขณะนี้ไม่มีข้อมูล") : null),
+        el("td", {}, m.agency || ""),
+        el("td", {}, TYPE_TH[m.type] || m.type || ""),
+        el("td", {}, m.grid_km ? `~${m.grid_km} กม. ` : "", el("small", {}, m.grid || "")))))));
+    $("about-ens").textContent = "ensemble ที่ใช้: " + M.ensembles.map((e) => `${e.name} (${e.members})`).join(", ");
+  }
+  const V = state.verify;
+  const n = V ? V.sections.reduce((a, x) => a + (x.n_obs || 0), 0) : 0;
+  $("about-stats").textContent = `อัปเดตอัตโนมัติทุกชั่วโมง · เริ่มเก็บข้อมูล ${V?.since || "–"} · ` +
+    `เทียบกับค่าวัดจริงแล้ว ${n.toLocaleString("th-TH")} ครั้ง · ใช้งานอยู่ ${state.aboutLoc ? state.aboutLoc.models.length : "–"} โมเดล + ${M ? M.ensembles.length : "–"} ensemble`;
 }
 
 async function selectLocation(i) {
+  document.body.classList.remove("about-mode");
+  if (location.hash === "#about") history.replaceState(null, "", location.pathname);
   state.locIdx = i;
   state.gps = null;                         // เปลี่ยนแท็บ = กลับมาใช้ตำแหน่งของแท็บนั้น
   store.set("loc", String(i));
@@ -353,6 +402,9 @@ async function buildLocalPayload(lat, lon) {
 }
 
 async function selectGps() {
+  document.body.classList.remove("about-mode");
+  if (location.hash === "#about") history.replaceState(null, "", location.pathname);
+  markChips();
   const chip = $("gps-chip");
   if (!navigator.geolocation) { chip.textContent = "📍 เบราว์เซอร์นี้ไม่รองรับ GPS"; return; }
   chip.textContent = "📍 กำลังหาตำแหน่ง…";

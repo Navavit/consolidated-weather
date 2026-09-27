@@ -138,8 +138,12 @@ def client_meta(cfg=None):
     """ค่าตั้งที่หน้าเว็บต้องใช้คำนวณพยากรณ์ของพิกัดผู้ชมเอง (เฉพาะโมเดลที่ไม่ต้องใช้ key)"""
     cfg = cfg or core.CFG
     return {
-        "models": [{"key": k, "name": m["name"], "grid_km": m["grid_km"]} for k, m in core.active_models(cfg).items()],
-        "ensembles": [{"key": k, "name": m["name"]} for k, m in core.active_ensembles(cfg).items()],
+        "models": [{"key": k, "name": m["name"], "grid_km": m["grid_km"], "grid": m["grid"], "agency": m["agency"],
+                    "type": m["type"]} for k, m in core.active_models(cfg).items()],
+        "keyed_models": [{"name": m["name"], "grid_km": m["grid_km"], "grid": m["grid"], "agency": m["agency"],
+                          "type": m["type"]} for m in (core.TMD_MODEL, core.GOOGLE_MODEL)],
+        "ensembles": [{"key": k, "name": m["name"], "members": m["members"], "grid_km": m["grid_km"]}
+                      for k, m in core.active_ensembles(cfg).items()],
         "variables": {k: {kk: v[kk] for kk in ("api", "label", "unit", "hour", "day")} for k, v in core.VARIABLES.items()},
         "api_variables": core.API_VARIABLES,
         "hour_windows": cfg["hour_windows"], "day_leads": cfg["day_leads"],
