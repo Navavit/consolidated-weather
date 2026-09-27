@@ -102,8 +102,22 @@ def verification_points(archive, locations, tmd3h, thaiwater, cfg=None):
         if s and f"tmd:{s['id']}" not in pts:
             pts[f"tmd:{s['id']}"] = {"key": f"tmd:{s['id']}", "kind": "tmd", "id": s["id"], "name": f"สถานี{s['name']}",
                                      "lat": s["lat"], "lon": s["lon"], "for": name, "dist_km": s["dist_km"]}
-        near = sorted((g for g in thaiwater if weather_now.distance_km(lat, lon, g["lat"], g["lon"]) <= GAUGE_MAX_KM),
-                      key=lambda g: weather_now.distance_km(lat, lon, g["lat"], g["lon"]))[:per_loc]
+        # เครื่องวัดฝนหนาแน่น (เช่น กทม.): หลายจุดในรัศมีที่กำหนด แต่ละจุดห่างกัน ≥ min_spacing_km
+        dense = (cfg.get("dense_gauges") or {}).get(name)
+        n_want = int(dense["n"]) if dense else per_loc
+        radius = float(dense.get("radius_km", GAUGE_MAX_KM)) if dense else GAUGE_MAX_KM
+        spacing = float(dense.get("min_spacing_km", 2.0)) if dense else 0.0
+        chosen = [p for p in pts.values() if p["kind"] == "tw" and p.get("for") == name]
+        near = []
+        for g in sorted((g for g in thaiwater if weather_now.distance_km(lat, lon, g["lat"], g["lon"]) <= radius),
+                        key=lambda g: weather_now.distance_km(lat, lon, g["lat"], g["lon"])):
+            if len(chosen) + len(near) >= n_want:
+                break
+            if f"tw:{g['id']}" in pts:
+                continue
+            if any(weather_now.distance_km(g["lat"], g["lon"], c["lat"], c["lon"]) < spacing for c in chosen + near):
+                continue
+            near.append(g)
         for g in near:
             key = f"tw:{g['id']}"
             if key not in pts:

@@ -43,6 +43,7 @@ I_AS_DRY = os.environ.get("I_AS_DRY", "1") == "1"
 DATA_ISSUES = [("CMA GRAPES", "tmax", None, "Tmax/Tmin ต่ำกว่าค่าวัด ~6 °C ทุกสถานี"),
                ("CMA GRAPES", "tmin", None, "Tmax/Tmin ต่ำกว่าค่าวัด ~6 °C ทุกสถานี"),
                ("NOAA GFS", "rain", 7, "ฝนเฉลี่ย D+7 ต่ำกว่า D+1 ~60% และแทบไม่ทายฝนหนัก (FBI 0.14)")]
+COORD_FIX_KM = 2.0                      # พิกัด GSOD ต่างจากกรมอุตุฯ เกินนี้ → ดึงพยากรณ์ใหม่ที่พิกัด GSOD
 COVERAGE_MIN = 0.9                      # โมเดลต้องมีข้อมูล ≥ 90% ของสถานี-วันในช่วง จึงนับเข้าตารางหลัก
 BOOT = 1000
 OUT = Path(__file__).resolve().parent / "out" / OUT_TAG
@@ -156,41 +157,78 @@ def _fetch_chunk(part, a, b):
     raise QuotaExceeded("ลองซ้ำครบแล้วยังติด rate limit")
 
 
-def forecasts(st):
+def _parse(part, js):
+    rows = []
+    for sid, j in zip(part["id"], js):
+        h = j["hourly"]
+        t = pd.to_datetime(h["time"])
+        day = t.normalize()
+        for k, name in MODELS.items():
+            for d in LEADS:
+                p = pd.Series(h.get(f"precipitation_previous_day{d}_{k}"), index=t, dtype=float)
+                tt = pd.Series(h.get(f"temperature_2m_previous_day{d}_{k}"), index=t, dtype=float)
+                if p.isna().all() and tt.isna().all():
+                    continue
+                gp, gt = p.groupby(day), tt.groupby(day)
+                df = pd.DataFrame({"rain": gp.sum().where(gp.count() == 24),
+                                   "tmax": gt.max().where(gt.count() == 24),
+                                   "tmin": gt.min().where(gt.count() == 24)}).dropna(how="all")
+                df = df.reset_index(names="date")
+                df["id"], df["model"], df["lead"] = sid, name, d
+                rows.append(df)
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+
+
+def gsod_coords():
+    """พิกัดสถานีจากไฟล์ GSOD (ใช้ปีล่าสุดที่มี)"""
+    out = {}
+    for f in sorted(CACHE.glob("gsod_*_*.csv")):
+        if f.stat().st_size == 0:
+            continue
+        try:
+            d = pd.read_csv(f, nrows=1, usecols=["LATITUDE", "LONGITUDE"])
+        except (ValueError, pd.errors.EmptyDataError):
+            continue
+        if len(d) and pd.notna(d.LATITUDE.iloc[0]):
+            out[f.stem.split("_")[-1]] = (float(d.LATITUDE.iloc[0]), float(d.LONGITUDE.iloc[0]))   # ไฟล์ปีหลังทับปีก่อน
+    return out
+
+
+def coord_fix(st):
+    """สถานีที่พิกัด GSOD ต่างจากพิกัดกรมอุตุฯ > COORD_FIX_KM: ต้องดึงพยากรณ์ใหม่ที่พิกัด GSOD"""
+    g = gsod_coords()
+    rows = []
+    for s in st.itertuples():
+        if s.id in g:
+            la, lo = g[s.id]
+            d = np.hypot(la - s.lat, (lo - s.lon) * np.cos(np.radians(s.lat))) * 111.32
+            if d > COORD_FIX_KM:
+                rows.append({"id": s.id, "lat": la, "lon": lo, "diff_km": d})
+    return pd.DataFrame(rows, columns=["id", "lat", "lon", "diff_km"])
+
+
+def forecasts(st, fix):
+    """พยากรณ์ย้อนหลัง: สถานีทั่วไปใช้ cache เดิม (พิกัดกรมอุตุฯ ต่างจาก GSOD ≤ 2 กม. ซึ่งเล็กกว่าช่องกริดมาก)
+    สถานีใน fix ดึงแยกที่พิกัด GSOD แล้วใช้แทนค่าเดิม"""
     months = pd.date_range(EVAL_START, EVAL_END, freq="MS")
+    fix_ids = set(fix["id"])
     parts = []
-    for m in months:
-        a, b = m, min(m + pd.offsets.MonthEnd(0), pd.Timestamp(EVAL_END))
-        for i in range(0, len(st), 25):
-            f = CACHE / f"fc_{a:%Y%m}_{i:03d}.pkl"
-            if f.exists():
-                parts.append(pd.read_pickle(f))
-                continue
-            part = st.iloc[i:i + 25]
-            js = _fetch_chunk(part, a, b)
-            rows = []
-            for sid, j in zip(part["id"], js):
-                h = j["hourly"]
-                t = pd.to_datetime(h["time"])
-                day = t.normalize()
-                for k, name in MODELS.items():
-                    for d in LEADS:
-                        p = pd.Series(h.get(f"precipitation_previous_day{d}_{k}"), index=t, dtype=float)
-                        tt = pd.Series(h.get(f"temperature_2m_previous_day{d}_{k}"), index=t, dtype=float)
-                        if p.isna().all() and tt.isna().all():
-                            continue
-                        gp, gt = p.groupby(day), tt.groupby(day)
-                        df = pd.DataFrame({"rain": gp.sum().where(gp.count() == 24),
-                                           "tmax": gt.max().where(gt.count() == 24),
-                                           "tmin": gt.min().where(gt.count() == 24)}).dropna(how="all")
-                        df = df.reset_index(names="date")
-                        df["id"], df["model"], df["lead"] = sid, name, d
-                        rows.append(df)
-            chunk = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
-            chunk.to_pickle(f)
-            parts.append(chunk)
-            print(f"  พยากรณ์ {a:%Y-%m} สถานี {i + 1}–{i + len(part)} ✓", flush=True)
-            time.sleep(2)
+    for group, table, tag in (("main", st, "{i:03d}"), ("fix", fix, "fix{i:03d}")):
+        for m in months:
+            a, b = m, min(m + pd.offsets.MonthEnd(0), pd.Timestamp(EVAL_END))
+            for i in range(0, len(table), 25):
+                f = CACHE / f"fc_{a:%Y%m}_{tag.format(i=i)}.pkl"
+                if f.exists():
+                    chunk = pd.read_pickle(f)
+                else:
+                    part = table.iloc[i:i + 25]
+                    chunk = _parse(part, _fetch_chunk(part, a, b))
+                    chunk.to_pickle(f)
+                    print(f"  พยากรณ์ {a:%Y-%m} {'พิกัด GSOD ' if group == 'fix' else ''}สถานี {i + 1}–{i + len(part)} ✓", flush=True)
+                    time.sleep(2)
+                if group == "main" and len(chunk):
+                    chunk = chunk[~chunk["id"].isin(fix_ids)]          # ใช้ค่าที่ดึงที่พิกัด GSOD แทน
+                parts.append(chunk)
     return pd.concat(parts, ignore_index=True)
 
 
@@ -281,7 +319,10 @@ def main():
     rain_clim, temp_clim = climatology(ob)
     print("ดึงพยากรณ์ย้อนหลัง …", flush=True)
     try:
-        fc = forecasts(st)
+        fix = coord_fix(st)
+        print(f"สถานีที่ต้องดึงใหม่ที่พิกัด GSOD (ต่าง > {COORD_FIX_KM:g} กม.): {len(fix)}", flush=True)
+        fix.to_csv(OUT / "coord_fix.csv", index=False)
+        fc = forecasts(st, fix)
     except QuotaExceeded as e:
         print(f"⚠️ ติดโควตา Open-Meteo: {e}\nรันคำสั่งเดิมอีกครั้งพรุ่งนี้ ระบบจะทำต่อจากจุดเดิม")
         return
