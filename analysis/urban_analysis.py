@@ -93,11 +93,35 @@ def main():
     rain = pd.DataFrame(rain)
     rain.to_csv(OUT / "urban_rain.csv", index=False)
 
+    # 3) ตรวจตัวแปรกวน: เทียบเมือง − ชนบท "ภายในภาคเดียวกัน" แล้วเฉลี่ยถ่วงน้ำหนักด้วยจำนวนข้อมูล
+    strat = []
+    for (lead, model), g in df.groupby(["lead", "model"]):
+        for var in ("tmin", "tmax"):
+            x = g.dropna(subset=[f"{var}_fc", f"{var}_ob"])
+            rows = []
+            for reg, xr in x.groupby("region"):
+                u, r = xr[xr.group == URBAN], xr[xr.group == RURAL]
+                if len(u) < 200 or len(r) < 200:
+                    continue
+                b = lambda z: (z[f"{var}_fc"] - z[f"{var}_ob"]).mean()
+                rows.append({"region": reg, "uhi_obs": u[f"{var}_ob"].mean() - r[f"{var}_ob"].mean(),
+                             "bias_diff": b(u) - b(r), "w": min(len(u), len(r))})
+            if rows:
+                t = pd.DataFrame(rows)
+                strat.append({"lead": f"D+{lead}", "model": model, "var": var, "regions": len(t),
+                              "UHI_obs_within_region": np.average(t.uhi_obs, weights=t.w),
+                              "bias_diff_within_region": np.average(t.bias_diff, weights=t.w),
+                              "same_sign_regions": int((np.sign(t.bias_diff) == np.sign(np.average(t.bias_diff, weights=t.w))).sum())})
+    strat = pd.DataFrame(strat)
+    strat.to_csv(OUT / "urban_heat_by_region.csv", index=False)
+
     pd.set_option("display.width", 200)
     print("=== อุณหภูมิ: (bias เมือง − bias ชนบท) °C · ติดลบ = โมเดลทายเมืองเย็นเกินเมื่อเทียบชนบท ===")
     t = heat[heat["lead"] == "D+1"].copy()
     t["sig"] = np.where((t.ci_lo > 0) | (t.ci_hi < 0), "*", "")
     print(t[["var", "model", "UHI_obs", "UHI_model", "bias_diff", "ci_lo", "ci_hi", "sig", "n"]].round(2).to_string(index=False))
+    print("\n=== ควบคุมภูมิภาค: Tmin/Tmax เมือง − ชนบท ภายในภาคเดียวกัน (D+1) ===")
+    print(strat[strat["lead"] == "D+1"].round(2).to_string(index=False))
     print("\n=== ฝน ≥10 มม.: ETS เมือง − ชนบท (D+1) ===")
     r = rain[rain["lead"] == "D+1"].copy()
     r["sig"] = np.where((r.ci_lo > 0) | (r.ci_hi < 0), "*", "")
