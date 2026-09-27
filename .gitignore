@@ -13,3 +13,4 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 .verify_tmp.db
+analysis/out/
