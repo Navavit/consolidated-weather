@@ -9,7 +9,7 @@
 📖 แหล่งข้อมูลและหลักการของแต่ละโมเดล: **[docs/MODELS.md](docs/MODELS.md)**
 
 ### ความละเอียดเชิงพื้นที่ (วัดจริงที่ประเทศไทย)
-TMD WRF **2 กม.** (ต้องมี token) · ECMWF IFS **9 กม.** · UKMO 10×15 · GFS 13 · ICON 14 · CMA 14 · GEM 16 · AIFS 28 · ARPEGE 28 · JMA 55 กม. · ensemble 25–55 กม.
+TMD WRF **2 กม.** (ต้องมี token) · Google Weather ฝน **~5 กม.** (ต้องมี key) · ECMWF IFS **9 กม.** · UKMO 10×15 · GFS 13 · ICON 14 · CMA 14 · GEM 16 · AIFS 28 · ARPEGE 28 · JMA 55 กม. · ensemble 25–55 กม.
 รายละเอียดอยู่ใน [docs/MODELS.md § 3](docs/MODELS.md#3-รายละเอียดแต่ละโมเดล)
 
 ## โครงสร้างไฟล์

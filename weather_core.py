@@ -90,8 +90,10 @@ TMD_MODEL = {"name": "TMD WRF", "agency": "กรมอุตุนิยมว�
              "grid_km": 2, "grid": "2 กม. (hourly, 48 ชม.)"}
 
 # Google Weather API (Maps Platform) — เฉพาะตำแหน่งของฉัน เพื่ออยู่ในโควตาฟรี (ต้องมี API key)
-GOOGLE_MODEL = {"name": "Google Weather", "agency": "Google (Maps Platform · WeatherNext)", "type": "AI/ML",
-                "grid_km": None, "grid": "ไม่เปิดเผย (รายชั่วโมง 10 วัน)"}
+# ความละเอียดวัดเองเมื่อ 27 ก.ย. 2026 (นนทบุรี): ฝนเปลี่ยนเป็นขั้นทุก ~5.4 กม. (~0.05°),
+# อุณหภูมิ/ความชื้นคงที่ตลอด ~13 กม. (กริดหยาบกว่า) — Google เองระบุแค่ "ไม่กี่กิโลเมตร"
+GOOGLE_MODEL = {"name": "Google Weather", "agency": "Google (Maps Platform · MetNet + WeatherNext 3)", "type": "AI/ML",
+                "grid_km": 5, "grid": "ฝน ~5 กม. (0.05°) · อุณหภูมิ/ความชื้น หยาบกว่า (>13 กม.)"}
 
 MODEL_NAMES = [m["name"] for m in DETERMINISTIC_MODELS.values()] + [TMD_MODEL["name"], GOOGLE_MODEL["name"]]
 
