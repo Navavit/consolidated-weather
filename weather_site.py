@@ -114,6 +114,10 @@ def write_site(results, out_dir, cfg=None):
         "observations": observations_summary(),
     }
     (out / "data" / "index.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+    # สำหรับ "📍 พยากรณ์ตรงที่ฉันอยู่": เบราว์เซอร์ดึง Open-Meteo เองแล้วคำนวณแบบเดียวกับฝั่ง Python
+    (out / "data" / "meta.json").write_text(json.dumps(client_meta(cfg), ensure_ascii=False), encoding="utf-8")
+    (out / "data" / "now_obs.json").write_text(json.dumps(
+        {"tmd": obs.get("tmd", []), "air": obs.get("air", [])}, ensure_ascii=False), encoding="utf-8")
     (out / ".nojekyll").write_text("")
     return out
 
@@ -127,4 +131,18 @@ def observations_summary(archive=core.ROOT / "archive", last=5):
         "count": len(recs),
         "rain": sum(bool(o["rained"]) for o in recs),
         "recent": [{k: o.get(k) for k in ("obs_time", "location", "rained", "amount_mm")} for o in recs[-last:][::-1]],
+    }
+
+
+def client_meta(cfg=None):
+    """ค่าตั้งที่หน้าเว็บต้องใช้คำนวณพยากรณ์ของพิกัดผู้ชมเอง (เฉพาะโมเดลที่ไม่ต้องใช้ key)"""
+    cfg = cfg or core.CFG
+    return {
+        "models": [{"key": k, "name": m["name"], "grid_km": m["grid_km"]} for k, m in core.active_models(cfg).items()],
+        "ensembles": [{"key": k, "name": m["name"]} for k, m in core.active_ensembles(cfg).items()],
+        "variables": {k: {kk: v[kk] for kk in ("api", "label", "unit", "hour", "day")} for k, v in core.VARIABLES.items()},
+        "api_variables": core.API_VARIABLES,
+        "hour_windows": cfg["hour_windows"], "day_leads": cfg["day_leads"],
+        "forecast_days": core.forecast_days(cfg), "rain_threshold_mm": cfg["rain_threshold_mm"],
+        "hourly_vars": HOURLY_VARS, "hourly_days": HOURLY_DAYS, "max_station_km": weather_now.MAX_STATION_KM,
     }

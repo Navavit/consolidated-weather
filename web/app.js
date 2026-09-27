@@ -158,20 +158,32 @@ function applyTheme(theme) {
 function renderChips() {
   $("locations").replaceChildren(...state.index.locations.map((l, i) =>
     el("button", { class: "chip", role: "tab", type: "button", "aria-selected": String(i === state.locIdx),
-      onclick: () => selectLocation(i) }, l.name)));
+      onclick: () => selectLocation(i) }, l.name)),
+    el("button", { class: "chip", id: "gps-chip", role: "tab", type: "button", "aria-selected": String(state.locIdx === -1),
+      onclick: selectGps }, "📍 ตรงที่ฉันอยู่"));
+}
+function markChips() {
+  [...$("locations").children].forEach((c, j) =>
+    c.setAttribute("aria-selected", String(c.id === "gps-chip" ? state.locIdx === -1 : j === state.locIdx)));
+  $("gps-note").hidden = state.locIdx !== -1;
 }
 
 async function selectLocation(i) {
   state.locIdx = i;
   state.gps = null;                         // เปลี่ยนแท็บ = กลับมาใช้ตำแหน่งของแท็บนั้น
   store.set("loc", String(i));
-  [...$("locations").children].forEach((c, j) => c.setAttribute("aria-selected", String(j === i)));
+  markChips();
   document.body.style.opacity = "0.6";      // คงหน้าเดิมไว้ระหว่างโหลด ไม่กระพริบ
   try {
     state.loc = await getJSON(`data/${state.index.locations[i].file}`);
   } finally {
     document.body.style.opacity = "";
   }
+  showLocation();
+}
+
+function showLocation() {
+  const i = state.locIdx;
   const models = state.loc.models.map((m) => m.name);
   const want = store.get("highlight");
   state.highlight = models.includes(want) ? want : models[0];
@@ -183,6 +195,12 @@ async function selectLocation(i) {
   if (state.map) state.map.setView([state.loc.lat, state.loc.lon], Math.max(state.map.getZoom(), 8));   // ดูฝนรอบตำแหน่งที่เลือก
   state.markers.forEach((m, j) => m.setStyle({ weight: j === i ? 3 : 1.5, radius: j === i ? 10 : 8,
     fillColor: j === i ? cssVar("--ink") : cssVar("--surface") }));
+  if (state.gpsMarker) state.gpsMarker.remove();
+  if (i === -1 && state.map) {
+    state.gpsMarker = L.circleMarker([state.loc.lat, state.loc.lon], {
+      radius: 10, color: cssVar("--ink"), weight: 3, fillColor: cssVar("--ink"), fillOpacity: 1,
+    }).bindTooltip("ตรงที่ฉันอยู่", { direction: "top", className: "map-label" }).addTo(state.map);
+  }
 }
 
 function renderAll() {
@@ -197,13 +215,175 @@ function renderAll() {
 }
 
 // ---------------------------------------------------------------------------
+// 📍 พยากรณ์ตรงที่ฉันอยู่: ดึง Open-Meteo ในเบราว์เซอร์แล้วคำนวณแบบเดียวกับ weather_core.py
+// (ไม่มี TMD WRF / Google Weather เพราะต้องใช้ key ลับ)
+// ---------------------------------------------------------------------------
+const HOUR = 3600e3, DAY = 86400e3;
+const naiveMs = (s) => Date.parse(s.length === 16 ? `${s}:00Z` : `${s}Z`);   // เวลาท้องถิ่นแบบไม่มี timezone → ms
+const median = (a) => { const v = a.filter((x) => x != null).sort((x, y) => x - y); const n = v.length;
+  return n ? (n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2) : null; };
+const pickLevel = (v, table) => (v == null || Number.isNaN(v) ? "–" : table.find(([lim]) => v < lim)[1]);
+const HEAT_LV = [[27, "🟢 ปกติ"], [33, "🟡 เฝ้าระวัง"], [42, "🟠 เตือนภัย"], [52, "🔴 อันตราย"], [Infinity, "🟣 อันตรายมาก"]];
+const UV_LV = [[3, "🟢 ต่ำ"], [6, "🟡 ปานกลาง"], [8, "🟠 สูง"], [11, "🔴 สูงมาก"], [Infinity, "🟣 อันตราย"]];
+const PM_LV = [[15.01, "🔵 ดีมาก"], [25.01, "🟢 ดี"], [37.51, "🟡 ปานกลาง"], [75.01, "🟠 เริ่มมีผลต่อสุขภาพ"], [Infinity, "🔴 มีผลต่อสุขภาพ"]];
+function distKm(a, b, c, d) {
+  const p = Math.PI / 180, x = Math.sin((c - a) * p / 2) ** 2 + Math.cos(a * p) * Math.cos(c * p) * Math.sin((d - b) * p / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(x));
+}
+
+function makeWindows(T, now, M) {
+  const w = M.hour_windows.map((n) => ({ label: `+${n} ชม.`, kind: "hour",
+    idx: T.flatMap((t, i) => (t > now && t <= now + n * HOUR ? [i] : [])), at: T.indexOf(now + n * HOUR) }));
+  const today = now - (now % DAY);
+  for (const d of M.day_leads) {
+    const start = today + d * DAY, dt = new Date(start);
+    const dd = String(dt.getUTCDate()).padStart(2, "0"), mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    w.push({ label: `D+${d} (${dd}/${mm})`, kind: "day", idx: T.flatMap((t, i) => (t > start && t <= start + DAY ? [i] : [])) });
+  }
+  return w;
+}
+function aggregate(arr, win, how) {
+  if (how === "at") return win.at >= 0 ? arr[win.at] ?? null : null;
+  const v = win.idx.map((i) => arr[i]);
+  if (!v.length || v.some((x) => x == null)) return null;      // ไม่ครบช่วง = ไม่แสดง
+  if (how === "sum") return v.reduce((a, b) => a + b, 0);
+  if (how === "mean") return v.reduce((a, b) => a + b, 0) / v.length;
+  return how === "max" ? Math.max(...v) : Math.min(...v);
+}
+const r1 = (v) => (v == null ? null : Math.round(v * 10) / 10);
+
+async function buildLocalPayload(lat, lon) {
+  if (!state.meta) state.meta = await getJSON("data/meta.json");
+  if (!state.nowObs) state.nowObs = await getJSON("data/now_obs.json").catch(() => ({ tmd: [], air: [] }));
+  const M = state.meta, thr = M.rain_threshold_mm;
+  const q = (base, p) => `${base}?${new URLSearchParams({ latitude: lat.toFixed(4), longitude: lon.toFixed(4), timezone: "auto", ...p })}`;
+  const [fc, aq, ...ens] = await Promise.all([
+    getJSON(q("https://api.open-meteo.com/v1/forecast", { hourly: M.api_variables.join(","),
+      models: M.models.map((m) => m.key).join(","), forecast_days: M.forecast_days })),
+    getJSON(q("https://air-quality-api.open-meteo.com/v1/air-quality", { hourly: "pm2_5,uv_index", forecast_days: 7 })).catch(() => null),
+    ...M.ensembles.map((e) => getJSON(q("https://ensemble-api.open-meteo.com/v1/ensemble",
+      { hourly: "precipitation", models: e.key, forecast_days: M.forecast_days })).catch(() => null)),
+  ]);
+  const T = fc.hourly.time.map(naiveMs);
+  const now = Math.floor((Date.now() + fc.utc_offset_seconds * 1000) / HOUR) * HOUR;
+  const wins = makeWindows(T, now, M);
+
+  // ข้อมูลรายชั่วโมง: data[ตัวแปร][ชื่อโมเดล] (ตัดโมเดลที่ไม่มีค่า)
+  const data = {};
+  for (const v of M.api_variables) {
+    data[v] = {};
+    for (const m of M.models) {
+      const a = fc.hourly[`${v}_${m.key}`];
+      if (a && a.some((x) => x != null)) data[v][m.name] = a;
+    }
+  }
+  const tables = {};
+  for (const [k, spec] of Object.entries(M.variables)) {
+    const use = wins.filter((w) => (w.kind === "hour" ? spec.hour : spec.day));
+    const rows = {};
+    for (const [model, a] of Object.entries(data[spec.api] || {})) {
+      const vals = use.map((w) => r1(aggregate(a, w, w.kind === "hour" ? spec.hour : spec.day)));
+      if (vals.some((x) => x != null)) rows[model] = vals;
+    }
+    if (Object.keys(rows).length) tables[k] = { label: spec.label, unit: spec.unit, columns: use.map((w) => w.label), rows };
+  }
+  const rainRows = Object.values(tables.rain.rows);
+  const col = (j) => rainRows.map((r) => r[j]).filter((x) => x != null);
+  const consensus = {
+    median: wins.map((_, j) => r1(median(col(j)))),
+    min: wins.map((_, j) => (col(j).length ? Math.min(...col(j)) : null)),
+    max: wins.map((_, j) => (col(j).length ? Math.max(...col(j)) : null)),
+    n_models: wins.map((_, j) => col(j).length),
+    agree_pct: wins.map((_, j) => (col(j).length ? Math.round(100 * col(j).filter((x) => x >= thr).length / col(j).length) : null)),
+  };
+
+  // ensemble: โอกาส (%) = สัดส่วนสมาชิกที่ฝนรวมในช่วง ≥ threshold
+  const ensemble = {};
+  ens.forEach((j, n) => {
+    if (!j) return;
+    const members = Object.keys(j.hourly).filter((k) => k.startsWith("precipitation") && j.hourly[k].some((x) => x != null));
+    if (!members.length) return;
+    const W = makeWindows(j.hourly.time.map(naiveMs), now, M);
+    ensemble[`${M.ensembles[n].name} (${members.length})`] = W.map((w) => {
+      const sums = members.map((k) => aggregate(j.hourly[k], w, "sum")).filter((x) => x != null);
+      return sums.length >= 0.8 * members.length ? Math.round(100 * sums.filter((x) => x >= thr).length / sums.length) : null;
+    });
+  });
+
+  // สรุปรายวัน (median ของทุกโมเดล) + PM2.5/UV จาก CAMS
+  const aqT = aq ? aq.hourly.time.map(naiveMs) : [];
+  const brief = wins.filter((w) => w.kind === "day").map((w) => {
+    const med = (k) => { const t = tables[k]; if (!t) return null; const j = t.columns.indexOf(w.label);
+      return j < 0 ? null : r1(median(Object.values(t.rows).map((r) => r[j]))); };
+    const j = tables.rain.columns.indexOf(w.label);
+    const vals = rainRows.map((r) => r[j]).filter((x) => x != null);
+    const start = T[w.idx[0]] - HOUR, end = start + DAY;
+    const aqIdx = aqT.flatMap((t, i) => (t > start && t <= end ? [i] : []));
+    const pmV = aqIdx.map((i) => aq.hourly.pm2_5[i]).filter((x) => x != null);
+    const uvA = aqIdx.map((i) => aq.hourly.uv_index[i]).filter((x) => x != null);
+    const pm = pmV.length ? r1(pmV.reduce((a, b) => a + b, 0) / pmV.length) : null;
+    const uvCand = [med("uv"), uvA.length ? Math.max(...uvA) : null].filter((x) => x != null);
+    const uv = uvCand.length ? r1(Math.max(...uvCand)) : null;
+    const feels = med("feels");
+    return { label: w.label, rain: med("rain"), n_rain: vals.filter((x) => x >= thr).length, n_models: vals.length,
+      tmin: med("tmin"), tmax: med("tmax"), feels, heat: pickLevel(feels, HEAT_LV), rh: med("rh"), gust: med("gust"),
+      uv, uv_level: pickLevel(uv, UV_LV), pm25: pm, pm25_level: pickLevel(pm, PM_LV) };
+  });
+
+  // รายชั่วโมง 7 วันสำหรับกราฟ
+  const hIdx = T.flatMap((t, i) => (t > now && t <= now + M.hourly_days * DAY ? [i] : []));
+  const series = {};
+  for (const v of M.hourly_vars) {
+    series[v] = Object.fromEntries(Object.entries(data[v] || {}).map(([m, a]) => [m, hIdx.map((i) => a[i])]));
+  }
+  const aqByT = new Map(aqT.map((t, i) => [t, aq.hourly.pm2_5[i]]));
+  const nearest = (list) => {
+    let best = null, bd = Infinity;
+    for (const s of list || []) { const d = distKm(lat, lon, s.lat, s.lon); if (d < bd) { bd = d; best = s; } }
+    return best && bd <= M.max_station_km ? { ...best, dist_km: Math.round(bd * 10) / 10 } : null;
+  };
+  return {
+    name: "📍 ตรงที่ฉันอยู่", lat, lon, threshold_mm: thr,
+    windows: wins.map((w) => w.label),
+    models: Object.keys(data.precipitation).map((n) => ({ name: n, grid_km: (M.models.find((m) => m.name === n) || {}).grid_km })),
+    tables, consensus, ensemble, brief,
+    hourly: { time: hIdx.map((i) => fc.hourly.time[i]), series, pm25: aq ? hIdx.map((i) => aqByT.get(T[i]) ?? null) : null },
+    now: { station: nearest(state.nowObs.tmd), air: nearest(state.nowObs.air) },
+  };
+}
+
+async function selectGps() {
+  const chip = $("gps-chip");
+  if (!navigator.geolocation) { chip.textContent = "📍 เบราว์เซอร์นี้ไม่รองรับ GPS"; return; }
+  chip.textContent = "📍 กำลังหาตำแหน่ง…";
+  const pos = await new Promise((ok) => navigator.geolocation.getCurrentPosition(ok, () => ok(null),
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 5 * 60000 }));
+  if (!pos) { chip.textContent = "📍 เปิด GPS ไม่ได้ (อนุญาตตำแหน่งในเบราว์เซอร์)"; return; }
+  chip.textContent = "📍 กำลังคำนวณพยากรณ์…";
+  document.body.style.opacity = "0.6";
+  try {
+    const { latitude: lat, longitude: lon } = pos.coords;
+    state.loc = await buildLocalPayload(lat, lon);
+    state.gps = { lat, lon };
+    state.locIdx = -1;
+    markChips();
+    showLocation();
+    chip.textContent = `📍 ตรงที่ฉันอยู่ (${lat.toFixed(3)}, ${lon.toFixed(3)})`;
+  } catch (e) {
+    chip.textContent = "📍 โหลดพยากรณ์ไม่ได้ ลองใหม่";
+  } finally {
+    document.body.style.opacity = "";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // แถบบันทึกฝน: เปิดฟอร์ม GitHub Issue ที่กรอกไว้แล้ว → GitHub Actions เก็บลง branch data
 // ---------------------------------------------------------------------------
 function bangkokNow() {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Bangkok" }).slice(0, 16);   // "YYYY-MM-DD HH:MM"
 }
 function reportTarget() {
-  if (state.gps) return { name: "ตำแหน่ง GPS", lat: state.gps.lat, lon: state.gps.lon };
+  if (state.gps) return { name: state.locIdx === -1 ? "ตรงที่ฉันอยู่ (GPS)" : "ตำแหน่ง GPS", lat: state.gps.lat, lon: state.gps.lon };
   const l = state.index.locations[state.locIdx];
   return { name: l.name, lat: l.lat, lon: l.lon };
 }
