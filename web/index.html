@@ -35,10 +35,6 @@
 
     <nav class="filters" aria-label="ตัวกรอง">
       <div class="chips" id="locations" role="tablist" aria-label="ตำแหน่ง"></div>
-      <label class="select">
-        <span>โมเดลที่เน้นในกราฟ</span>
-        <select id="highlight"></select>
-      </label>
       <a id="edit-loc" class="link" target="_blank" rel="noopener">＋ เพิ่ม/แก้ตำแหน่ง</a>
     </nav>
     <p class="note" id="gps-note" hidden>📍 คำนวณพยากรณ์ตรงพิกัดของคุณในเบราว์เซอร์ (ไม่ส่งพิกัดไปเก็บที่ไหน) · ใช้โมเดลระดับโลกทุกตัว + ensemble ·
@@ -100,7 +96,13 @@
     </section>
 
     <section aria-labelledby="h-charts">
-      <h2 id="h-charts">รายชั่วโมง 7 วัน</h2>
+      <div class="section-head">
+        <h2 id="h-charts">รายชั่วโมง 7 วัน</h2>
+        <label class="select">
+          <span>เส้นสีส้ม = โมเดล</span>
+          <select id="highlight"></select>
+        </label>
+      </div>
       <div class="charts" id="charts"></div>
     </section>
 

@@ -214,8 +214,9 @@ def collect_all(cfg=None, locations=None, export_dir=None, to_db=True, site_dir=
     log, results = [], []
     for i, (lat, lon, name) in enumerate(locations):
         # Google Weather: เฉพาะตำแหน่งของฉัน (ตำแหน่งแรก) ทุกชั่วโมง 10 วัน และเฉพาะรอบที่เก็บลง branch data
+        # เว้นอย่างน้อย 25 นาที (รอบตามตารางของ GitHub คลาดได้ 5–30 นาที) · เพดานรายเดือนคุมค่าใช้จ่ายอีกชั้น
         gkey = f"loc:{lat:.3f},{lon:.3f}"
-        google = 240 if i == 0 and core.google_allowed(export_dir, gkey, 50, cfg) else None
+        google = 240 if i == 0 and core.google_allowed(export_dir, gkey, 25, cfg) else None
         try:
             out = collect_location(lat, lon, name, cfg, export_dir, to_db, full=bool(site_dir), google_hours=google)
             if google:

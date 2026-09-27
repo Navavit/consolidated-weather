@@ -123,7 +123,7 @@ def collect_points(points, archive, cfg=None, google_for=None):
     log = []
     for p in points:
         gkey = f"pt:{p['key']}"
-        google = 48 if p.get("for") == google_for and core.google_allowed(archive, gkey, 110, cfg) else None
+        google = 48 if p.get("for") == google_for and core.google_allowed(archive, gkey, 100, cfg) else None
         try:
             data, now, tz = core.fetch_deterministic(p["lat"], p["lon"], cfg, google)
             if google:
