@@ -51,6 +51,8 @@ Open-Meteo รับข้อมูลเปิด (open data) จากหน�
 ### ทางเลือกอื่นที่ยังไม่ได้เชื่อมต่อ
 | แหล่ง | หมายเหตุ |
 |---|---|
+| Google Weather API (Maps Platform) | พยากรณ์ของ Google เอง รายชั่วโมง 10 วัน ต้องมี API key และเปิด billing (มีโควตาฟรี) |
+| Google DeepMind WeatherNext 3 | 0.1° (~10 กม.) รายชั่วโมง 15 วัน ensemble 64 สมาชิก ผ่าน BigQuery / Earth Engine / GCS ต้องขอสิทธิ์ (allowlist) และมีโปรเจกต์ Google Cloud |
 | สสน. (HII) WRF-ROMS | 3 กม. ล่วงหน้า 3 วัน / 9 กม. ล่วงหน้า 7 วัน รันวันละ 2 รอบ แต่เผยแพร่บน [thaiwater.net](https://tiwrm.hii.or.th/v3/wrfroms/rain_forecast) เป็น **ภาพแผนที่** ยังไม่พบ API ที่ให้ค่าตัวเลข |
 | TMD ข้อมูลสถานีตรวจวัด | ฝนที่วัดได้จริง ใช้เป็น "ค่าจริง" สำหรับตรวจสอบได้ (สมัครที่ `data.tmd.go.th/api`) |
 | GPM IMERG (NASA) | ฝนจากดาวเทียมทั่วโลก ใช้เป็นค่าจริงอัตโนมัติได้ แต่ล่าช้าหลายชั่วโมง |
@@ -105,6 +107,7 @@ Open-Meteo รับข้อมูลเปิด (open data) จากหน�
 | 7 | BOM ACCESS-G | `bom_access_global` | BOM (ออสเตรเลีย) | ฟิสิกส์ | 0.117° × 0.176° | 13 × 19 | ⚠️ ไม่มีข้อมูล ณ วันที่ตรวจ |
 | 8 | ECCC GEM | `gem_global` | ECCC (แคนาดา) | ฟิสิกส์ | 0.15° | 16 | ~10 วัน |
 | 9 | ECMWF AIFS | `ecmwf_aifs025_single` | ECMWF (ยุโรป) | **AI** | 0.25° | 28 | ~15 วัน |
+| 9b | NOAA AIGFS | `ncep_aigfs025` | NOAA (สหรัฐฯ) | **AI (GraphCast)** | 0.25° | 28 | ~16 วัน |
 | 10 | MF ARPEGE | `meteofrance_arpege_world` | Météo-France | ฟิสิกส์ | 0.25° | 28 | ~4 วัน |
 | 11 | JMA GSM | `jma_gsm` | JMA (ญี่ปุ่น) | ฟิสิกส์ | 0.5° | 55 | ~11 วัน |
 
@@ -133,6 +136,11 @@ Open-Meteo รับข้อมูลเปิด (open data) จากหน�
 **2. ECMWF AIFS (Artificial Intelligence Forecasting System)**
 โมเดล AI ของ ECMWF ใช้งานจริงตั้งแต่ปี 2025 โครงสร้างเป็น **graph neural network (encoder/decoder) + transformer** ฝึกด้วยข้อมูล ERA5 reanalysis และ analysis ของ IFS
 เริ่มจากสภาพตั้งต้นของ IFS แล้วทำนายทีละ 6 ชม. ใช้เปรียบเทียบได้ดีว่า "AI กับฟิสิกส์ต่างกันแค่ไหน" ในพื้นที่ของคุณ
+
+**NOAA AIGFS / AIGEFS (AI Global Forecast System)**
+NOAA นำสถาปัตยกรรม **GraphCast ของ Google DeepMind** (graph neural network) มาฝึกต่อด้วยข้อมูลของ NOAA แล้วรันเป็นระบบปฏิบัติการคู่กับ GFS
+ใช้สภาพตั้งต้นจากระบบ data assimilation ของ GFS ความละเอียด 0.25° ฝนเป็นช่วงละ 6 ชม. (Open-Meteo กระจายเป็นรายชั่วโมงให้) มีแบบ ensemble 31 สมาชิก (AIGEFS)
+ไม่มีตัวแปรความชื้น อุณหภูมิที่รู้สึก และลมกระโชก ช่องเหล่านี้จึงว่าง ใช้เทียบกับ ECMWF AIFS ได้ว่า "AI ของสหรัฐฯ กับของยุโรป" ตัวไหนแม่นกว่าในไทย
 
 **3. NOAA GFS (Global Forecast System)**
 ของสหรัฐฯ ใช้ **FV3 (Finite-Volume Cubed-Sphere)** แบ่งโลกเป็นลูกบาศก์ 6 หน้า และใช้ hybrid 4D-EnVar data assimilation
@@ -189,6 +197,7 @@ Open-Meteo รับข้อมูลเปิด (open data) จากหน�
 | ECMWF ENS | `ecmwf_ifs025` | 51 (control + 50) | 0.25° (28 กม.) | 15 วัน | ensemble ที่ได้รับการยอมรับว่าดีที่สุดในระดับโลก |
 | ECMWF AIFS ENS | `ecmwf_aifs025` | 51 | 0.25° (28 กม.) | 15 วัน | ensemble แบบ AI ฝึกด้วย CRPS ให้กระจายตัวสมจริง |
 | NOAA GEFS | `gfs025` | 31 | 0.25° (28 กม.) | 16 วัน | ensemble ของ GFS |
+| NOAA AIGEFS | `ncep_aigefs025` | 31 | 0.25° (28 กม.) | 16 วัน | ensemble แบบ AI (สถาปัตยกรรม GraphCast) |
 | DWD ICON-EPS | `icon_seamless` | 40 | 0.25° (28 กม.) | ~7.5 วัน | |
 | UKMO MOGREPS-G | `ukmo_global_ensemble_20km` | 18 | 0.19° × 0.28° (21 × 30 กม.) | ~7 วัน | |
 | ECCC GEPS | `gem_global` | 21 | 0.5° (55 กม.) | 16 วัน | ใช้หลายสูตรฟิสิกส์ผสมกัน |

@@ -76,6 +76,8 @@ DETERMINISTIC_MODELS = {
     "bom_access_global":              {"name": "BOM ACCESS-G", "agency": "BOM (ออสเตรเลีย)",       "type": "Physics", "grid_km": 16, "grid": "0.117° × 0.176°"},
     "gem_global":                     {"name": "ECCC GEM",     "agency": "ECCC (แคนาดา)",          "type": "Physics", "grid_km": 16, "grid": "0.15°"},
     "ecmwf_aifs025_single":           {"name": "ECMWF AIFS",   "agency": "ECMWF (ยุโรป)",          "type": "AI/ML",   "grid_km": 28, "grid": "0.25°"},
+    "ncep_aigfs025":                  {"name": "NOAA AIGFS",   "agency": "NOAA (สหรัฐฯ) · สถาปัตยกรรม GraphCast ของ Google DeepMind",
+                                       "type": "AI/ML",   "grid_km": 28, "grid": "0.25°"},
     "meteofrance_arpege_world":       {"name": "MF ARPEGE",    "agency": "Météo-France (ฝรั่งเศส)", "type": "Physics", "grid_km": 28, "grid": "0.25°"},
     "jma_gsm":                        {"name": "JMA GSM",      "agency": "JMA (ญี่ปุ่น)",           "type": "Physics", "grid_km": 55, "grid": "0.5°"},
 }
@@ -91,6 +93,7 @@ ENSEMBLE_MODELS = {
     "ecmwf_ifs025":              {"name": "ECMWF ENS",      "members": 51, "grid_km": 28},
     "ecmwf_aifs025":             {"name": "ECMWF AIFS ENS", "members": 51, "grid_km": 28},
     "gfs025":                    {"name": "NOAA GEFS",      "members": 31, "grid_km": 28},
+    "ncep_aigefs025":            {"name": "NOAA AIGEFS",    "members": 31, "grid_km": 28},
     "icon_seamless":             {"name": "DWD ICON-EPS",   "members": 40, "grid_km": 28},
     "ukmo_global_ensemble_20km": {"name": "UKMO MOGREPS-G", "members": 18, "grid_km": 25},
     "gem_global":                {"name": "ECCC GEPS",      "members": 21, "grid_km": 55},
