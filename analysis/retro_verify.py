@@ -54,11 +54,22 @@ CACHE = Path(__file__).resolve().parent / "out" / "cache"
 # สถานีและค่าวัด
 # ---------------------------------------------------------------------------
 def stations():
+    """รายชื่อสถานี (บันทึกตายตัวที่ out/stations.csv ตั้งแต่รันครั้งแรก เพื่อให้ทุกเดือนใช้ชุดเดียวกัน)"""
+    frozen = Path(__file__).resolve().parent / "out" / "stations.csv"
+    if frozen.exists():
+        return pd.read_csv(frozen, dtype={"id": str})
     csv = subprocess.run(["git", "show", "origin/data:obs/tmdday/2026-09-27.csv"], cwd=core.ROOT,
                          capture_output=True, text=True, check=True).stdout
     s = pd.read_csv(io.StringIO(csv), dtype={"id": str})[["id", "name", "lat", "lon"]].drop_duplicates("id")
     s["region"] = [region(a, b) for a, b in zip(s["lat"], s["lon"])]
-    return s.reset_index(drop=True)
+    first = sorted(CACHE.glob("fc_202401_[0-9]*.pkl"))          # ชุดสถานีเดิมที่ดึงไว้ตั้งแต่เดือนแรก
+    if first:
+        ids = set(pd.concat([pd.read_pickle(f)["id"] for f in first]).astype(str))
+        s = s[s["id"].isin(ids)]
+    s = s.reset_index(drop=True)
+    frozen.parent.mkdir(parents=True, exist_ok=True)
+    s.to_csv(frozen, index=False)
+    return s
 
 
 def region(lat, lon):
@@ -212,6 +223,8 @@ def forecasts(st, fix):
     สถานีใน fix ดึงแยกที่พิกัด GSOD แล้วใช้แทนค่าเดิม"""
     months = pd.date_range(EVAL_START, EVAL_END, freq="MS")
     fix_ids = set(fix["id"])
+    cache_only = os.environ.get("CACHE_ONLY") == "1"          # วิเคราะห์เฉพาะข้อมูลที่ดึงไว้แล้ว ไม่เรียก API
+    fixed_months = {m for m in months if all((CACHE / f"fc_{m:%Y%m}_fix{i:03d}.pkl").exists() for i in range(0, len(fix), 25))}
     parts = []
     for group, table, tag in (("main", st, "{i:03d}"), ("fix", fix, "fix{i:03d}")):
         for m in months:
@@ -220,16 +233,20 @@ def forecasts(st, fix):
                 f = CACHE / f"fc_{a:%Y%m}_{tag.format(i=i)}.pkl"
                 if f.exists():
                     chunk = pd.read_pickle(f)
+                elif cache_only:
+                    continue
                 else:
                     part = table.iloc[i:i + 25]
                     chunk = _parse(part, _fetch_chunk(part, a, b))
                     chunk.to_pickle(f)
                     print(f"  พยากรณ์ {a:%Y-%m} {'พิกัด GSOD ' if group == 'fix' else ''}สถานี {i + 1}–{i + len(part)} ✓", flush=True)
                     time.sleep(2)
-                if group == "main" and len(chunk):
+                if group == "main" and len(chunk) and (m in fixed_months or not cache_only):
                     chunk = chunk[~chunk["id"].isin(fix_ids)]          # ใช้ค่าที่ดึงที่พิกัด GSOD แทน
+                elif group == "main" and len(chunk):
+                    chunk = chunk[~chunk["id"].isin(set(fix[fix["diff_km"] > 10]["id"]))]   # ยังไม่ได้ดึงใหม่: ตัดสถานีที่ต่าง > 10 กม.
                 parts.append(chunk)
-    return pd.concat(parts, ignore_index=True)
+    return pd.concat(parts, ignore_index=True).drop_duplicates(["id", "date", "model", "lead"], keep="last")
 
 
 # ---------------------------------------------------------------------------

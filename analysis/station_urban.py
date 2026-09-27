@@ -22,6 +22,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from retro_verify import stations, CACHE, OUT  # noqa: E402
 
+COASTLINE = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_coastline.geojson"
 WORLDPOP = "https://data.worldpop.org/GIS/Population/Global_2000_2020_1km/2020/THA/tha_ppp_2020_1km_Aggregated.tif"
 URBAN_CENTRE, URBAN_CLUSTER = 1500, 300
 
@@ -48,6 +49,27 @@ def density(a, x0, y0, sx, sy, lat, lon, k=1):
     return float(np.nanmean(win) / cell_km2) if np.isfinite(win).any() else 0.0
 
 
+def coast_points():
+    """จุดบนแนวชายฝั่ง (Natural Earth 10 ม.) เฉพาะบริเวณรอบประเทศไทย"""
+    f = CACHE / "ne_10m_coastline.geojson"
+    if not f.exists():
+        f.write_bytes(requests.get(COASTLINE, timeout=120).content)
+    import json
+    pts = []
+    for feat in json.loads(f.read_text())["features"]:
+        for lon, lat in feat["geometry"]["coordinates"]:
+            if 0 <= lat <= 25 and 90 <= lon <= 110:
+                pts.append((lat, lon))
+    return np.array(pts)
+
+
+def dist_coast_km(coast, lat, lon):
+    p = np.radians
+    a = (np.sin(p(coast[:, 0] - lat) / 2) ** 2
+         + np.cos(p(lat)) * np.cos(p(coast[:, 0])) * np.sin(p(coast[:, 1] - lon) / 2) ** 2)
+    return float(12742 * np.arcsin(np.sqrt(a)).min())
+
+
 def gsod_coords():
     rows = []
     for f in sorted(glob.glob(str(CACHE / "gsod_2025_*.csv"))):
@@ -69,6 +91,8 @@ def main():
     pop = load_worldpop()
     g["pop_density"] = [density(*pop, la, lo) for la, lo in zip(g.g_lat, g.g_lon)]
     g["pop_density_tmd_coord"] = [density(*pop, la, lo) for la, lo in zip(g.lat, g.lon)]
+    coast = coast_points()
+    g["dist_coast_km"] = [dist_coast_km(coast, la, lo) for la, lo in zip(g.g_lat, g.g_lon)]
     g["degurba"] = np.select([g.pop_density >= URBAN_CENTRE, g.pop_density >= URBAN_CLUSTER],
                              ["urban centre", "urban cluster"], "rural")
     g["airport"] = (g.gsod_name.str.contains("INTL|INTERNATIONAL|AIRPORT|AIRFIELD|AB,", case=False, regex=True)
@@ -82,6 +106,8 @@ def main():
     print("\nจำนวนตามกลุ่ม:\n", g["group"].value_counts().to_string())
     print("\nระดับความเป็นเมือง × ภูมิภาค:\n", pd.crosstab(g["degurba"], g["region"]).to_string())
     print("\nความหนาแน่นประชากร (คน/ตร.กม.) ตามกลุ่ม:\n", g.groupby("group")["pop_density"].describe()[["count", "min", "50%", "max"]].round(0).to_string())
+    print("\nความสูงและระยะจากทะเล ตามกลุ่ม (มัธยฐาน):\n",
+          g.groupby("group")[["elev_m", "dist_coast_km"]].median().round(1).to_string())
     print(f"\nพิกัด GSOD vs กรมอุตุฯ: ต่าง > 2 กม. {int((g.coord_diff_km > 2).sum())} สถานี, > 10 กม. {int((g.coord_diff_km > 10).sum())} สถานี")
     changed = g[g.degurba != np.select([g.pop_density_tmd_coord >= URBAN_CENTRE, g.pop_density_tmd_coord >= URBAN_CLUSTER],
                                        ["urban centre", "urban cluster"], "rural")]
