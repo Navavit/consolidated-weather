@@ -2,6 +2,7 @@
 
   python3 collector.py run                         # ดึงทุกตำแหน่งใน config.json 1 รอบ
   python3 collector.py run --export-dir archive --no-db   # (GitHub Actions) เขียนเป็นไฟล์ .csv.gz
+  python3 collector.py run --no-db --site-dir site     # สร้างหน้าเว็บในเครื่อง (ดูด้วย python3 -m http.server -d site)
   python3 collector.py sync                        # ดึงข้อมูลที่ GitHub Actions เก็บไว้ลงฐานข้อมูลในเครื่อง
   python3 collector.py location --action add --name "ที่ทำงาน" --coords "13.72, 100.53"
   python3 collector.py loop --every 60             # ดึงซ้ำทุก 60 นาที (Ctrl+C เพื่อหยุด)
@@ -23,7 +24,8 @@ import weather_store as store
 
 
 def cmd_run(args):
-    log = store.collect_all(export_dir=getattr(args, "export_dir", None), to_db=not getattr(args, "no_db", False))
+    log = store.collect_all(export_dir=getattr(args, "export_dir", None), to_db=not getattr(args, "no_db", False),
+                            site_dir=getattr(args, "site_dir", None))
     print(pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"))
     print(log.to_string(index=False))
     return 0 if (log.status == "ok").all() else 1
@@ -160,6 +162,7 @@ def main():
     s = sub.add_parser("run")
     s.add_argument("--export-dir", help="เขียนแต่ละรอบเป็น .csv.gz ในโฟลเดอร์นี้")
     s.add_argument("--no-db", action="store_true", help="ไม่บันทึกลง SQLite")
+    s.add_argument("--site-dir", help="สร้างหน้าเว็บ (GitHub Pages) ลงโฟลเดอร์นี้")
     s.set_defaults(func=cmd_run)
     sub.add_parser("sync").set_defaults(func=cmd_sync)
     s = sub.add_parser("location")

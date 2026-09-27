@@ -458,36 +458,53 @@ def pm25_level(p):
     return "🔴 มีผลต่อสุขภาพ"
 
 
-def daily_brief(tables, aq, now, cfg=None):
-    """การ์ดสรุปรายวันสำหรับคนทั่วไป (median ของทุกโมเดล)"""
+def daily_brief_records(tables, aq, now, cfg=None):
+    """ค่าสรุปรายวัน (median ของทุกโมเดล) เป็น list ของ dict — ใช้ทั้งใน notebook และหน้าเว็บ"""
     thr = (cfg or CFG)["rain_threshold_mm"]
     idx = aq.index if aq is not None else pd.DatetimeIndex([])
-    rows = {}
+    out = []
     for label, (_, m, _) in window_masks(idx, now, cfg, kinds=("day",)).items():
         med = {k: (t[label].median() if label in t else np.nan) for k, t in tables.items()}
         rain_t = tables.get("rain")
         has = rain_t is not None and label in rain_t
-        n_rain = int(rain_t[label].ge(thr).sum()) if has else 0
-        n_all = int(rain_t[label].notna().sum()) if has else 0
         pm, uv = np.nan, med.get("uv", np.nan)
         if aq is not None and m.any():
             pm = aq.loc[m, "pm2_5"].mean()
             uv = np.nanmax([uv, aq.loc[m, "uv_index"].max()])
-        rows[label] = {
-            "🌧️ ฝน (มม.)": med.get("rain"),
-            f"โมเดลที่ว่าฝนตก ≥{thr} มม.": f"{n_rain}/{n_all}",
-            "🌡️ ต่ำสุด–สูงสุด (°C)": f"{med.get('tmin', np.nan):.0f}–{med.get('tmax', np.nan):.0f}",
-            "🥵 รู้สึกเหมือน (°C)": med.get("feels"),
-            "ระดับความร้อน": heat_level(med.get("feels")),
-            "💧 ความชื้น (%)": med.get("rh"),
-            "💨 ลมกระโชก (กม./ชม.)": med.get("gust"),
-            "☀️ UV": uv,
-            "ระดับ UV": uv_level(uv),
-            "😷 PM2.5": pm,
-            "ระดับ PM2.5": pm25_level(pm),
+        out.append({
+            "label": label,
+            "rain": med.get("rain"),
+            "n_rain": int(rain_t[label].ge(thr).sum()) if has else 0,
+            "n_models": int(rain_t[label].notna().sum()) if has else 0,
+            "tmin": med.get("tmin"), "tmax": med.get("tmax"),
+            "feels": med.get("feels"), "heat": heat_level(med.get("feels")),
+            "rh": med.get("rh"), "gust": med.get("gust"),
+            "uv": uv, "uv_level": uv_level(uv),
+            "pm25": pm, "pm25_level": pm25_level(pm),
+        })
+    return out
+
+
+def daily_brief(tables, aq, now, cfg=None):
+    """การ์ดสรุปรายวันสำหรับคนทั่วไป (median ของทุกโมเดล) เป็นตารางสำหรับ notebook"""
+    thr = (cfg or CFG)["rain_threshold_mm"]
+    r1 = lambda v: round(v, 1) if isinstance(v, float) and not np.isnan(v) else v
+    rows = {}
+    for b in daily_brief_records(tables, aq, now, cfg):
+        rows[b["label"]] = {
+            "🌧️ ฝน (มม.)": r1(b["rain"]),
+            f"โมเดลที่ว่าฝนตก ≥{thr} มม.": f"{b['n_rain']}/{b['n_models']}",
+            "🌡️ ต่ำสุด–สูงสุด (°C)": f"{b['tmin']:.0f}–{b['tmax']:.0f}",
+            "🥵 รู้สึกเหมือน (°C)": r1(b["feels"]),
+            "ระดับความร้อน": b["heat"],
+            "💧 ความชื้น (%)": r1(b["rh"]),
+            "💨 ลมกระโชก (กม./ชม.)": r1(b["gust"]),
+            "☀️ UV": r1(b["uv"]),
+            "ระดับ UV": b["uv_level"],
+            "😷 PM2.5": r1(b["pm25"]),
+            "ระดับ PM2.5": b["pm25_level"],
         }
-    return pd.DataFrame(rows).map(lambda v: round(v, 1) if isinstance(v, float) else v) \
-        if hasattr(pd.DataFrame, "map") else pd.DataFrame(rows).applymap(lambda v: round(v, 1) if isinstance(v, float) else v)
+    return pd.DataFrame(rows)
 
 
 def analyze_location(lat, lon, name, cfg=None):

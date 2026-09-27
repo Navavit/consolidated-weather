@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>เทียบพยากรณ์อากาศ</title>
+  <meta name="description" content="เปรียบเทียบพยากรณ์ฝนและอากาศจากหลายโมเดล (TMD WRF, ECMWF, GFS, ICON ฯลฯ) อัปเดตทุกชั่วโมง">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌦️</text></svg>">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-row">
+      <div>
+        <h1>🌦️ เทียบพยากรณ์อากาศหลายโมเดล</h1>
+        <p class="sub" id="updated">กำลังโหลด…</p>
+      </div>
+      <button id="theme" class="ghost" type="button" aria-label="สลับโหมดสว่าง/มืด">🌓</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <nav class="filters" aria-label="ตัวกรอง">
+      <div class="chips" id="locations" role="tablist" aria-label="ตำแหน่ง"></div>
+      <label class="select">
+        <span>โมเดลที่เน้นในกราฟ</span>
+        <select id="highlight"></select>
+      </label>
+      <a id="edit-loc" class="link" target="_blank" rel="noopener">＋ เพิ่ม/แก้ตำแหน่ง</a>
+    </nav>
+
+    <section aria-labelledby="h-brief">
+      <h2 id="h-brief">สรุปรายวัน <small>ค่ากลาง (median) ของทุกโมเดล</small></h2>
+      <div class="cards" id="brief"></div>
+    </section>
+
+    <section aria-labelledby="h-next">
+      <h2 id="h-next">ฝนช่วงถัดไป <small>ฝนสะสมตั้งแต่ตอนนี้</small></h2>
+      <div class="tiles" id="next"></div>
+    </section>
+
+    <section aria-labelledby="h-rain">
+      <h2 id="h-rain">ฝนแยกโมเดล (มม.) <small>เรียงจากโมเดลละเอียดสูงไปหยาบ</small></h2>
+      <div class="table-wrap" id="rain-table"></div>
+      <p class="note" id="rain-note"></p>
+    </section>
+
+    <section aria-labelledby="h-ens">
+      <h2 id="h-ens">โอกาสฝนจาก ensemble (%) <small id="ens-sub"></small></h2>
+      <div class="table-wrap" id="ens-table"></div>
+    </section>
+
+    <section aria-labelledby="h-charts">
+      <h2 id="h-charts">รายชั่วโมง 7 วัน</h2>
+      <div class="charts" id="charts"></div>
+    </section>
+
+    <section aria-labelledby="h-params">
+      <h2 id="h-params">พารามิเตอร์อื่นแยกโมเดล</h2>
+      <label class="select"><span>พารามิเตอร์</span><select id="param"></select></label>
+      <div class="table-wrap" id="param-table"></div>
+    </section>
+
+    <section aria-labelledby="h-map">
+      <h2 id="h-map">แผนที่ <small>สีจุด = ฝนพรุ่งนี้ (median) · แตะเพื่อเลือกตำแหน่ง</small></h2>
+      <div id="map" class="map" role="region" aria-label="แผนที่ตำแหน่ง"></div>
+      <div class="scale" id="map-scale"></div>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <p>ข้อมูล: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0) จาก ECMWF, NOAA, DWD, ECCC, JMA, Météo-France, UK Met Office, CMA ·
+      <a href="https://data.tmd.go.th/nwpapi/" target="_blank" rel="noopener">กรมอุตุนิยมวิทยา (TMD WRF)</a> ·
+      คุณภาพอากาศ <a href="https://atmosphere.copernicus.eu/" target="_blank" rel="noopener">CAMS</a></p>
+    <p>พยากรณ์เป็นค่าจากแบบจำลองคอมพิวเตอร์ ไม่ใช่ประกาศทางการ · <a id="docs-link" target="_blank" rel="noopener">หลักการของแต่ละโมเดล</a> · <a id="repo-link" target="_blank" rel="noopener">โค้ด</a></p>
+  </footer>
+
+  <div id="tooltip" class="tooltip" role="status" hidden></div>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

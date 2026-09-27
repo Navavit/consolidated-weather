@@ -1,0 +1,114 @@
+"""สร้างข้อมูลสำหรับหน้าเว็บ (GitHub Pages)
+
+site/
+  index.html, app.js, style.css   คัดลอกจาก web/
+  data/index.json                 รายชื่อตำแหน่ง + เวลาอัปเดต
+  data/loc-<n>.json               ข้อมูลของแต่ละตำแหน่ง (ผลจาก weather_core.analyze_location)
+"""
+import json
+import math
+import os
+import shutil
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+import weather_core as core
+
+WEB_DIR = core.ROOT / "web"
+HOURLY_DAYS = 7
+HOURLY_VARS = ["precipitation", "temperature_2m", "apparent_temperature", "relative_humidity_2m", "wind_gusts_10m"]
+MODEL_META = {m["name"]: m for m in list(core.DETERMINISTIC_MODELS.values()) + [core.TMD_MODEL]}
+
+
+def _num(v, nd=1):
+    """ตัวเลข → float ปัดเศษ หรือ None (JSON ไม่รองรับ NaN)"""
+    if v is None:
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(f) or math.isinf(f) else round(f, nd)
+
+
+def _rows(table, nd=1):
+    return {str(idx): [_num(v, nd) for v in row] for idx, row in zip(table.index, table.values)}
+
+
+def location_payload(result, cfg=None):
+    cfg = cfg or core.CFG
+    now = result["now"]
+    tables = result["tables"]
+    rain = tables["rain"]
+    windows = list(rain.columns)
+
+    models = [{"name": n, **{k: MODEL_META.get(n, {}).get(k) for k in ("grid_km", "agency", "type")}}
+              for n in result["data"]["precipitation"].columns]
+
+    cons = result["consensus"]
+    ens = result["ensemble"].reindex(columns=windows)
+
+    end = now + pd.Timedelta(days=HOURLY_DAYS)
+    hourly = {}
+    times = None
+    for var in HOURLY_VARS:
+        df = result["data"].get(var)
+        if df is None or df.empty:
+            continue
+        df = df[(df.index > now) & (df.index <= end)]
+        times = df.index if times is None else times
+        hourly[var] = {m: [_num(v) for v in df[m].values] for m in df.columns}
+    pm25 = None
+    if result.get("aq") is not None and times is not None:
+        pm25 = [_num(v) for v in result["aq"]["pm2_5"].reindex(times).values]
+
+    return {
+        "name": result["name"], "lat": result["lat"], "lon": result["lon"], "tz": result["tz"],
+        "now": now.isoformat(),
+        "threshold_mm": cfg["rain_threshold_mm"],
+        "windows": windows,
+        "models": models,
+        "tables": {k: {"label": core.VARIABLES[k]["label"], "unit": core.VARIABLES[k]["unit"],
+                       "columns": list(t.columns), "rows": _rows(t)}
+                   for k, t in tables.items()},
+        "consensus": {
+            "median": [_num(v) for v in cons.loc["median"]],
+            "min": [_num(v) for v in cons.loc["min"]],
+            "max": [_num(v) for v in cons.loc["max"]],
+            "n_models": [_num(v, 0) for v in cons.loc["จำนวนโมเดล"]],
+            "agree_pct": [_num(v, 0) for v in cons.loc["% เห็นตรงกันว่าฝนตก"]],
+        },
+        "ensemble": _rows(ens, 0),
+        "brief": [{k: (_num(v) if isinstance(v, (float, np.floating)) else v) for k, v in b.items()}
+                  for b in core.daily_brief_records(tables, result.get("aq"), now, cfg)],
+        "hourly": {"time": [t.isoformat() for t in times] if times is not None else [],
+                   "series": hourly, "pm25": pm25},
+    }
+
+
+def write_site(results, out_dir, cfg=None):
+    """เขียนหน้าเว็บทั้งหมดลง out_dir (คัดลอก web/ + สร้าง data/*.json)"""
+    out = Path(out_dir)
+    if WEB_DIR.exists():
+        shutil.copytree(WEB_DIR, out, dirs_exist_ok=True)
+    (out / "data").mkdir(parents=True, exist_ok=True)
+    index = []
+    for i, r in enumerate(results):
+        fname = f"loc-{i}.json"
+        (out / "data" / fname).write_text(
+            json.dumps(location_payload(r, cfg), ensure_ascii=False, allow_nan=False, separators=(",", ":")),
+            encoding="utf-8")
+        d1 = r["tables"]["rain"].filter(like="D+1").iloc[:, 0] if not r["tables"]["rain"].filter(like="D+1").empty else None
+        index.append({"file": fname, "name": r["name"], "lat": r["lat"], "lon": r["lon"],
+                      "rain_d1_median": _num(d1.median()) if d1 is not None else None})
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    meta = {
+        "generated": pd.Timestamp.now(tz="Asia/Bangkok").isoformat(timespec="minutes"),
+        "repo": repo,
+        "locations": index,
+    }
+    (out / "data" / "index.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+    (out / ".nojekyll").write_text("")
+    return out

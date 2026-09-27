@@ -4,6 +4,7 @@ config.local.json
 # ข้อมูลในเครื่อง (ข้อมูลจาก GitHub Actions อยู่ใน branch "data")
 data/
 archive/
+site/
 outputs/
 logs/
 scripts/*.plist

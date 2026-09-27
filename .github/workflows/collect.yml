@@ -1,5 +1,6 @@
-# ดึงพยากรณ์ทุกตำแหน่งใน config.json ทุกชั่วโมง แล้วเก็บเป็นไฟล์ .csv.gz ใน branch "data"
-# ดึงลงเครื่องด้วย: python3 collector.py sync
+# ดึงพยากรณ์ทุกตำแหน่งใน config.json ทุกชั่วโมง
+#   1) เก็บเป็นไฟล์ .csv.gz ใน branch "data" (ดึงลงเครื่องด้วย: python3 collector.py sync)
+#   2) สร้างหน้าเว็บแล้ว deploy ขึ้น GitHub Pages
 name: ดึงพยากรณ์อัตโนมัติ
 
 on:
@@ -9,6 +10,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: data-branch              # ไม่ให้สองรอบเขียน branch data พร้อมกัน
@@ -43,7 +46,7 @@ jobs:
       - name: ดึงข้อมูล
         env:
           TMD_NWP_TOKEN: ${{ secrets.TMD_NWP_TOKEN }}
-        run: python collector.py run --export-dir archive --no-db
+        run: python collector.py run --export-dir archive --no-db --site-dir site
 
       - name: บันทึกลง branch data
         if: success() || failure()     # ถ้าบางตำแหน่งล้มเหลว ยังเก็บตำแหน่งที่สำเร็จไว้
@@ -57,3 +60,20 @@ jobs:
             git pull -q --rebase origin data
           done
           exit 1
+
+      - name: อัปโหลดหน้าเว็บ
+        if: success() || failure()
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  deploy:
+    needs: collect
+    if: success() || failure()
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

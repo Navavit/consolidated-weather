@@ -162,29 +162,45 @@ def import_archive(archive_dir, cfg=None):
     return n_new, len(files)
 
 
-def collect_location(lat, lon, name, cfg=None, export_dir=None, to_db=True):
-    """ดึงเฉพาะที่ต้องใช้ตรวจสอบย้อนหลัง (ฝน deterministic + ensemble) แล้วบันทึก"""
-    data, now, tz = core.fetch_deterministic(lat, lon, cfg)
-    ens = core.fetch_all_ensembles(lat, lon, cfg)
-    result = {"name": name, "lat": lat, "lon": lon, "tz": tz, "now": now, "data": data, "ensembles": ens}
+def collect_location(lat, lon, name, cfg=None, export_dir=None, to_db=True, full=False):
+    """ดึงแล้วบันทึก 1 ตำแหน่ง
+
+    full=False ดึงเฉพาะที่ใช้ตรวจสอบย้อนหลัง (ฝน + ensemble)
+    full=True  ดึงครบทุกพารามิเตอร์ (ใช้สร้างหน้าเว็บด้วย) และคืนผลวิเคราะห์ใน out["result"]
+    """
+    if full:
+        result = core.analyze_location(lat, lon, name, cfg)
+    else:
+        data, now, tz = core.fetch_deterministic(lat, lon, cfg)
+        ens = core.fetch_all_ensembles(lat, lon, cfg)
+        result = {"name": name, "lat": lat, "lon": lon, "tz": tz, "now": now, "data": data, "ensembles": ens}
     out = {}
     if to_db:
         out["run_id"], out["rows"] = save_snapshot(result, cfg)
     if export_dir:
         path, out["rows"] = export_snapshot(result, export_dir, cfg)
         out["file"] = str(path)
+    if full:
+        out["result"] = result
     return out
 
 
-def collect_all(cfg=None, locations=None, export_dir=None, to_db=True):
+def collect_all(cfg=None, locations=None, export_dir=None, to_db=True, site_dir=None):
+    """ดึงทุกตำแหน่ง ถ้าระบุ site_dir จะสร้างหน้าเว็บจากผลรอบนี้ด้วย"""
     cfg = cfg or core.CFG
     locations = locations or core.resolve_locations(cfg)
-    log = []
+    log, results = [], []
     for lat, lon, name in locations:
         try:
-            log.append({"location": name, **collect_location(lat, lon, name, cfg, export_dir, to_db), "status": "ok"})
+            out = collect_location(lat, lon, name, cfg, export_dir, to_db, full=bool(site_dir))
+            if "result" in out:
+                results.append(out.pop("result"))
+            log.append({"location": name, **out, "status": "ok"})
         except Exception as e:                     # เก็บตำแหน่งอื่นต่อแม้ตำแหน่งหนึ่งล้มเหลว
             log.append({"location": name, "rows": 0, "status": f"error: {e}"})
+    if site_dir and results:
+        import weather_site
+        weather_site.write_site(results, site_dir, cfg)
     return pd.DataFrame(log)
 
 
