@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 ROOT = Path(__file__).resolve().parent
 
@@ -20,6 +22,12 @@ AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 PREVIOUS_RUNS_URL = "https://previous-runs-api.open-meteo.com/v1/forecast"
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 TMD_HOURLY_URL = "https://data.tmd.go.th/nwpapi/v1/forecast/location/hourly/at"
+
+# ลองใหม่อัตโนมัติเมื่อ timeout / 429 / 5xx (Open-Meteo ensemble ช้าช่วงต้นชั่วโมง) รอ 0, 10, 20 วินาที
+SESSION = requests.Session()
+SESSION.mount("https://", HTTPAdapter(max_retries=Retry(
+    total=3, connect=3, read=2, status=3, backoff_factor=5,
+    status_forcelist=[429, 500, 502, 503, 504], allowed_methods=["GET"])))
 
 # ---------------------------------------------------------------------------
 # Config
@@ -154,7 +162,7 @@ def get_my_location():
 
 def geocode(name):
     """ค้นหาพิกัดจากชื่อสถานที่ (Open-Meteo Geocoding API)"""
-    r = requests.get(GEOCODING_URL, params={"name": name, "count": 1, "language": "th"}, timeout=15)
+    r = SESSION.get(GEOCODING_URL, params={"name": name, "count": 1, "language": "th"}, timeout=15)
     r.raise_for_status()
     res = r.json().get("results")
     if not res:
@@ -227,7 +235,7 @@ def _local_now(utc_offset_seconds):
 
 def fetch_deterministic(lat, lon, cfg=None):
     """คืน (dict[api_var -> DataFrame(index=เวลาท้องถิ่น, columns=ชื่อโมเดล)], now_local, timezone)"""
-    r = requests.get(FORECAST_URL, params={
+    r = SESSION.get(FORECAST_URL, params={
         "latitude": lat, "longitude": lon,
         "hourly": ",".join(API_VARIABLES),
         "models": ",".join(active_models(cfg)),
@@ -262,7 +270,7 @@ def fetch_tmd_hourly(lat, lon, now, cfg=None, hours=48):
     คืน dict[api_var แบบ Open-Meteo -> Series(index=เวลาไทย)]
     สมมติว่า rain ที่เวลา t คือฝนในชั่วโมงก่อนหน้า เหมือน Open-Meteo
     """
-    r = requests.get(TMD_HOURLY_URL, headers={
+    r = SESSION.get(TMD_HOURLY_URL, headers={
         "accept": "application/json", "authorization": f"Bearer {tmd_token(cfg)}",
     }, params={
         "lat": lat, "lon": lon, "date": f"{now:%Y-%m-%d}", "hour": now.hour, "duration": hours,
@@ -288,11 +296,11 @@ def fetch_tmd_hourly(lat, lon, now, cfg=None, hours=48):
 
 def fetch_ensemble(lat, lon, key, cfg=None):
     """คืน DataFrame ฝนรายชั่วโมง: index=เวลา, columns=สมาชิกแต่ละตัว"""
-    r = requests.get(ENSEMBLE_URL, params={
+    r = SESSION.get(ENSEMBLE_URL, params={
         "latitude": lat, "longitude": lon,
         "hourly": "precipitation", "models": key,
         "forecast_days": forecast_days(cfg), "timezone": "auto",
-    }, timeout=90)
+    }, timeout=60)
     r.raise_for_status()
     h = r.json()["hourly"]
     cols = {k: v for k, v in h.items() if k.startswith("precipitation")}
@@ -314,7 +322,7 @@ def fetch_all_ensembles(lat, lon, cfg=None):
 
 def fetch_air_quality(lat, lon, cfg=None):
     """PM2.5, US AQI, UV จาก CAMS (โมเดลเดียว ใช้เป็นข้อมูลประกอบ)"""
-    r = requests.get(AIR_QUALITY_URL, params={
+    r = SESSION.get(AIR_QUALITY_URL, params={
         "latitude": lat, "longitude": lon,
         "hourly": "pm2_5,us_aqi,uv_index",
         "forecast_days": min(forecast_days(cfg), 7), "timezone": "auto",
@@ -330,7 +338,7 @@ def fetch_previous_runs(lat, lon, start_date, end_date, days=range(1, 8)):
     คืน DataFrame แบบ long: time, model, lead_days, precipitation
     """
     hv = ["precipitation_previous_day%d" % d for d in days]
-    r = requests.get(PREVIOUS_RUNS_URL, params={
+    r = SESSION.get(PREVIOUS_RUNS_URL, params={
         "latitude": lat, "longitude": lon,
         "hourly": ",".join(hv), "models": ",".join(active_models()),
         "start_date": str(start_date), "end_date": str(end_date), "timezone": "auto",
@@ -515,7 +523,7 @@ def fetch_grid(variable="precipitation_sum", day=1, models=None, step=1.0,
     rows = []
     for i in range(0, len(pts), chunk):
         part = pts[i:i + chunk]
-        r = requests.get(FORECAST_URL, params={
+        r = SESSION.get(FORECAST_URL, params={
             "latitude": ",".join(str(p[0]) for p in part),
             "longitude": ",".join(str(p[1]) for p in part),
             "daily": variable, "models": ",".join(models),
