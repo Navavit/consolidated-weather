@@ -146,6 +146,14 @@ tr.sum th, tr.sum td { border-top: 1px solid var(--axis); font-weight: 700; }
 .tooltip .row b { font-size: 13.5px; }
 .tooltip .row span { color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
 
+/* ตอนนี้ + เรดาร์ */
+.card .src { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.card .warn { color: var(--ink-2); font-size: 12px; margin-top: 6px; }
+.radar-card { background: var(--surface); border-radius: 12px; box-shadow: 0 0 0 1px var(--ring); padding: 12px; margin-top: 12px; }
+.radar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.radar-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.muted { color: var(--muted); font-weight: 400; }
+
 /* แผนที่ */
 .map { height: 380px; border-radius: 12px; box-shadow: 0 0 0 1px var(--ring); overflow: hidden; }
 .scale { display: flex; align-items: center; gap: 2px; font-size: 12px; color: var(--ink-2); margin-top: 8px; flex-wrap: wrap; }

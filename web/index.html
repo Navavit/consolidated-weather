@@ -42,6 +42,19 @@
       <a id="edit-loc" class="link" target="_blank" rel="noopener">＋ เพิ่ม/แก้ตำแหน่ง</a>
     </nav>
 
+    <section aria-labelledby="h-now">
+      <h2 id="h-now">ตอนนี้ <small>ค่าวัดจริงจากสถานีใกล้ที่สุด + ค่าจากโมเดล</small></h2>
+      <div class="cards" id="now"></div>
+      <div class="radar-card">
+        <div class="radar-head">
+          <h3>🛰️ เรดาร์ฝน <span id="radar-time" class="muted"></span></h3>
+          <button id="radar-play" class="ghost small" type="button" aria-label="เล่น/หยุดภาพเคลื่อนไหว">▶︎ ย้อนหลัง 2 ชม.</button>
+        </div>
+        <div id="map" class="map" role="region" aria-label="แผนที่เรดาร์ฝนและตำแหน่ง"></div>
+        <p class="note">เรดาร์: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> (อัปเดตทุก 10 นาที) · สีฟ้าอ่อน = ฝนเบา → สีเข้ม/เหลือง = ฝนหนัก · แตะวงกลมเพื่อเลือกตำแหน่ง</p>
+      </div>
+    </section>
+
     <section aria-labelledby="h-brief">
       <h2 id="h-brief">สรุปรายวัน <small>ค่ากลาง (median) ของทุกโมเดล</small></h2>
       <div class="cards" id="brief"></div>
@@ -74,17 +87,14 @@
       <div class="table-wrap" id="param-table"></div>
     </section>
 
-    <section aria-labelledby="h-map">
-      <h2 id="h-map">แผนที่ <small>สีจุด = ฝนพรุ่งนี้ (median) · แตะเพื่อเลือกตำแหน่ง</small></h2>
-      <div id="map" class="map" role="region" aria-label="แผนที่ตำแหน่ง"></div>
-      <div class="scale" id="map-scale"></div>
-    </section>
   </main>
 
   <footer class="wrap foot">
     <p>ข้อมูล: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0) จาก ECMWF, NOAA, DWD, ECCC, JMA, Météo-France, UK Met Office, CMA ·
       <a href="https://data.tmd.go.th/nwpapi/" target="_blank" rel="noopener">กรมอุตุนิยมวิทยา (TMD WRF)</a> ·
-      คุณภาพอากาศ <a href="https://atmosphere.copernicus.eu/" target="_blank" rel="noopener">CAMS</a></p>
+      คุณภาพอากาศ <a href="https://atmosphere.copernicus.eu/" target="_blank" rel="noopener">CAMS</a> ·
+      ค่าวัดจริง: <a href="https://data.tmd.go.th/" target="_blank" rel="noopener">สถานีกรมอุตุฯ</a>, <a href="http://air4thai.pcd.go.th/" target="_blank" rel="noopener">Air4Thai (คพ.)</a> ·
+      เรดาร์ <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a></p>
     <p>พยากรณ์เป็นค่าจากแบบจำลองคอมพิวเตอร์ ไม่ใช่ประกาศทางการ · <a id="docs-link" target="_blank" rel="noopener">หลักการของแต่ละโมเดล</a> · <a id="repo-link" target="_blank" rel="noopener">โค้ด</a></p>
   </footer>
 

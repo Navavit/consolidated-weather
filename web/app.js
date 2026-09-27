@@ -177,12 +177,14 @@ async function selectLocation(i) {
       `${m.name}${m.grid_km ? ` (${m.grid_km} กม.)` : ""}`)));
   $("highlight").onchange = (e) => { state.highlight = e.target.value; store.set("highlight", state.highlight); renderCharts(); };
   renderAll();
-  if (state.map) state.map.panTo([state.loc.lat, state.loc.lon]);
-  state.markers.forEach((m, j) => m.setStyle({ weight: j === i ? 3 : 1.5 }));
+  if (state.map) state.map.setView([state.loc.lat, state.loc.lon], Math.max(state.map.getZoom(), 8));   // ดูฝนรอบตำแหน่งที่เลือก
+  state.markers.forEach((m, j) => m.setStyle({ weight: j === i ? 3 : 1.5, radius: j === i ? 10 : 8,
+    fillColor: j === i ? cssVar("--ink") : cssVar("--surface") }));
 }
 
 function renderAll() {
   renderRainBar();
+  renderNow();
   renderBrief();
   renderNext();
   renderRainTable();
@@ -237,6 +239,91 @@ function renderRainBar() {
   const last = o.recent[0];
   $("rb-hint").textContent = "กดแล้วจะเปิดฟอร์มบน GitHub ที่กรอกไว้ให้ → กด “Create” (หรือ Submit) เพื่อยืนยัน" +
     (o.count ? ` · บันทึกแล้ว ${o.count} ครั้ง (ตก ${o.rain}) · ล่าสุด ${last.rained ? "🌧️" : "☀️"} ${last.location} ${last.obs_time.slice(5, 16)}` : "");
+}
+
+// ---------------------------------------------------------------------------
+// ตอนนี้: ค่าวัดจริง (สถานีกรมอุตุฯ, Air4Thai) + ค่าจากโมเดลที่ดึงสดในเบราว์เซอร์
+// ---------------------------------------------------------------------------
+const WMO = {
+  0: "☀️ ท้องฟ้าแจ่มใส", 1: "🌤️ ส่วนใหญ่แจ่มใส", 2: "⛅ มีเมฆบางส่วน", 3: "☁️ เมฆมาก",
+  45: "🌫️ หมอก", 48: "🌫️ หมอกน้ำค้างแข็ง", 51: "🌦️ ฝนละอองเบา", 53: "🌦️ ฝนละออง", 55: "🌦️ ฝนละอองหนาแน่น",
+  61: "🌧️ ฝนเล็กน้อย", 63: "🌧️ ฝนปานกลาง", 65: "🌧️ ฝนหนัก", 80: "🌦️ ฝนซู่เล็กน้อย", 81: "🌧️ ฝนซู่ปานกลาง",
+  82: "⛈️ ฝนซู่หนัก", 95: "⛈️ พายุฝนฟ้าคะนอง", 96: "⛈️ พายุฝนฟ้าคะนอง ลูกเห็บ", 99: "⛈️ พายุฝนฟ้าคะนอง ลูกเห็บหนัก",
+};
+const DIRS = ["เหนือ", "ตะวันออกเฉียงเหนือ", "ตะวันออก", "ตะวันออกเฉียงใต้", "ใต้", "ตะวันตกเฉียงใต้", "ตะวันตก", "ตะวันตกเฉียงเหนือ"];
+const dirText = (deg) => (deg == null ? "" : `จากทิศ${DIRS[Math.round(deg / 45) % 8]}`);
+const hhmm = (iso) => (iso ? localTime(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "–");
+const currentCache = {};
+
+function stationCard(s) {
+  if (!s) {
+    return el("article", { class: "card" }, el("h3", {}, "📡 วัดจริง (กรมอุตุฯ)"),
+      el("p", { class: "warn" }, "ไม่มีสถานีอุตุฯ ในรัศมี 60 กม."));
+  }
+  const age = (Date.now() - localTime(s.time).getTime()) / 3600000;
+  return el("article", { class: "card" },
+    el("h3", {}, `📡 วัดจริง · สถานี${s.name}`),
+    el("div", { class: "src" }, `ห่าง ${fmt(s.dist_km)} กม. · เวลา ${hhmm(s.time)} น. (อัปเดตทุก 3 ชม.)`),
+    el("div", { class: "hero" }, fmt(s.temp), el("small", {}, " °C")),
+    el("dl", { class: "kv" },
+      el("dt", {}, "🌧️ ฝน 3 ชม.ล่าสุด"), el("dd", {}, `${fmt(s.rain_3h)} มม.`),
+      el("dt", {}, "🌧️ ฝน 24 ชม."), el("dd", {}, `${fmt(s.rain_24h)} มม.`),
+      el("dt", {}, "💧 ความชื้น"), el("dd", {}, `${fmt(s.rh, 0)} %`),
+      el("dt", {}, "💨 ลม"), el("dd", {}, `${fmt(s.wind_kmh, 0)} กม./ชม. ${dirText(s.wind_dir)}`),
+      el("dt", {}, "👁️ ทัศนวิสัย"), el("dd", {}, `${fmt(s.visibility_km, 0)} กม.`)),
+    s.dist_km > 20 ? el("p", { class: "warn" }, "ℹ️ สถานีอยู่ไกล ค่าอาจต่างจากจุดของคุณ โดยเฉพาะฝน") : null,
+    age > 4 ? el("p", { class: "warn" }, `⚠️ ข้อมูลเก่า ${Math.round(age)} ชม.`) : null);
+}
+
+function airCard(a) {
+  if (!a) {
+    return el("article", { class: "card" }, el("h3", {}, "😷 PM2.5 วัดจริง (Air4Thai)"),
+      el("p", { class: "warn" }, "ไม่มีสถานีตรวจวัดในรัศมี 60 กม."));
+  }
+  return el("article", { class: "card" },
+    el("h3", {}, `😷 PM2.5 วัดจริง · ${a.name}`),
+    el("div", { class: "src" }, `ห่าง ${fmt(a.dist_km)} กม. · เวลา ${hhmm(a.time)} น. (รายชั่วโมง)`),
+    el("div", { class: "hero" }, fmt(a.pm25), el("small", {}, " มคก./ลบ.ม."), " ", statusPill(a.level)),
+    el("div", { class: "hero-sub" }, a.area || ""));
+}
+
+function modelCard(c) {
+  const card = el("article", { class: "card", id: "now-model" }, el("h3", {}, "🖥️ ตอนนี้จากโมเดล (Open-Meteo)"));
+  if (!c) { card.append(el("div", { class: "src" }, "กำลังโหลด…")); return card; }
+  if (c.error) { card.append(el("p", { class: "warn" }, "โหลดไม่ได้")); return card; }
+  card.append(
+    el("div", { class: "src" }, `เวลา ${hhmm(c.time)} น. · ค่าจากโมเดล (ไม่ใช่ค่าวัด) อัปเดตทุก 15 นาที`),
+    el("div", { class: "hero" }, fmt(c.temperature_2m), el("small", {}, " °C")),
+    el("div", { class: "hero-sub" }, WMO[c.weather_code] || `รหัสอากาศ ${c.weather_code}`),
+    el("dl", { class: "kv" },
+      el("dt", {}, "🌧️ ฝน 15 นาทีล่าสุด"), el("dd", {}, `${fmt(c.precipitation)} มม.`),
+      el("dt", {}, "🥵 รู้สึกเหมือน"), el("dd", {}, `${fmt(c.apparent_temperature, 0)} °C`),
+      el("dt", {}, "💧 ความชื้น"), el("dd", {}, `${fmt(c.relative_humidity_2m, 0)} %`),
+      el("dt", {}, "💨 ลมกระโชก"), el("dd", {}, `${fmt(c.wind_gusts_10m, 0)} กม./ชม.`),
+      el("dt", {}, "☁️ เมฆ"), el("dd", {}, `${fmt(c.cloud_cover, 0)} %`)));
+  return card;
+}
+
+async function fetchCurrent(lat, lon) {
+  const key = `${lat},${lon}`, hit = currentCache[key];
+  if (hit && Date.now() - hit.at < 10 * 60000) return hit.data;
+  const u = new URL("https://api.open-meteo.com/v1/forecast");
+  u.search = new URLSearchParams({
+    latitude: lat, longitude: lon, timezone: "Asia/Bangkok",
+    current: "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,wind_gusts_10m",
+  });
+  const j = await getJSON(u.toString());
+  currentCache[key] = { at: Date.now(), data: j.current };
+  return j.current;
+}
+
+function renderNow() {
+  const L = state.loc, n = L.now || {};
+  $("now").replaceChildren(stationCard(n.station), airCard(n.air), modelCard(null));
+  const idx = state.locIdx;
+  fetchCurrent(L.lat, L.lon)
+    .then((c) => { if (state.locIdx === idx) $("now-model").replaceWith(modelCard(c)); })
+    .catch(() => { if (state.locIdx === idx) $("now-model").replaceWith(modelCard({ error: true })); });
 }
 
 // ---------------------------------------------------------------------------
@@ -549,23 +636,67 @@ function initMap() {
   state.map = L.map("map", { scrollWheelZoom: false });
   updateMapTiles();
   state.markers = locs.map((l, i) => {
-    const c = stepColor(l.rain_d1_median, RAIN_STEPS) || cssVar("--surface");
     const mk = L.circleMarker([l.lat, l.lon], {
-      radius: 11, color: cssVar("--ink"), weight: 1.5, fillColor: c, fillOpacity: 0.95,
+      radius: 8, color: cssVar("--ink"), weight: 1.5, fillColor: cssVar("--surface"), fillOpacity: 1,
     }).addTo(state.map);
-    mk.bindTooltip(`${l.name}: ${fmt(l.rain_d1_median)} มม.`, { direction: "top", className: "map-label" });
-    mk.on("click", () => { selectLocation(i); window.scrollTo({ top: 0, behavior: "smooth" }); });
+    mk.bindTooltip(l.name, { direction: "top", className: "map-label" });
+    mk.on("click", () => selectLocation(i));
     return mk;
   });
-  const b = L.latLngBounds(locs.map((l) => [l.lat, l.lon]));
-  const fit = () => { state.map.invalidateSize(); state.map.fitBounds(b.pad(0.3), { maxZoom: 9 }); };
-  fit();
-  requestAnimationFrame(fit);                // ขนาดกล่องแผนที่อาจยังไม่ถูกคำนวณตอนสร้าง
-  const labels = ["0", "0.1", "1", "5", "10", "20", "50+"];
-  const idx = [null, 0, 2, 4, 5, 7, 9];
-  $("map-scale").replaceChildren(el("span", {}, "ฝน (มม.)"),
-    ...idx.map((k, j) => [el("i", { style: `background:${k == null ? cssVar("--surface") : BLUE[k]};box-shadow:0 0 0 1px var(--ring)` }),
-      el("span", {}, labels[j])]).flat());
+  state.map.setView([locs[0].lat, locs[0].lon], 8);
+  requestAnimationFrame(() => state.map.invalidateSize());   // ขนาดกล่องแผนที่อาจยังไม่ถูกคำนวณตอนสร้าง
+  loadRadar();
+}
+
+// เรดาร์ฝนจาก RainViewer: ภาพทุก 10 นาที ย้อนหลัง ~2 ชม. (ความละเอียดสูงสุดที่ zoom 7)
+const radar = { frames: [], layers: {}, idx: -1, timer: null, host: "" };
+async function loadRadar() {
+  try {
+    const j = await getJSON("https://api.rainviewer.com/public/weather-maps.json");
+    radar.host = j.host;
+    radar.frames = [...(j.radar.past || []), ...(j.radar.nowcast || [])];
+    showRadarFrame(radar.frames.length - 1);
+    $("radar-play").onclick = toggleRadar;
+    setInterval(async () => {                 // หน้าเปิดค้างไว้ ก็ได้ภาพล่าสุดเอง
+      if (radar.timer) return;
+      const k = await getJSON("https://api.rainviewer.com/public/weather-maps.json").catch(() => null);
+      if (k) { radar.frames = [...(k.radar.past || []), ...(k.radar.nowcast || [])]; showRadarFrame(radar.frames.length - 1); }
+    }, 10 * 60000);
+  } catch {
+    $("radar-time").textContent = "· โหลดเรดาร์ไม่ได้";
+  }
+}
+function radarLayer(f) {
+  if (!radar.layers[f.path]) {
+    radar.layers[f.path] = L.tileLayer(`${radar.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`, {
+      opacity: 0, maxNativeZoom: 7, maxZoom: 18, zIndex: 10,
+      attribution: '<a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>',
+    }).addTo(state.map);
+  }
+  return radar.layers[f.path];
+}
+function showRadarFrame(i) {
+  if (!radar.frames.length) return;
+  const f = radar.frames[i];
+  if (radar.idx >= 0 && radar.frames[radar.idx]) radarLayer(radar.frames[radar.idx]).setOpacity(0);
+  radarLayer(f).setOpacity(0.75);
+  radarLayer(radar.frames[(i + 1) % radar.frames.length]);   // โหลดเฟรมถัดไปรอไว้
+  radar.idx = i;
+  const t = new Date(f.time * 1000);
+  const latest = i === radar.frames.length - 1;
+  $("radar-time").textContent = `· ${t.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.${latest ? " (ล่าสุด)" : ""}`;
+}
+function toggleRadar() {
+  if (radar.timer) {
+    clearInterval(radar.timer); radar.timer = null;
+    showRadarFrame(radar.frames.length - 1);
+    $("radar-play").textContent = "▶︎ ย้อนหลัง 2 ชม.";
+    return;
+  }
+  $("radar-play").textContent = "⏸ หยุด";
+  let i = 0;
+  showRadarFrame(i);
+  radar.timer = setInterval(() => { i = (i + 1) % radar.frames.length; showRadarFrame(i); }, 700);
 }
 
 // pill สถานะ: จุดสีมากับไอคอนและข้อความเสมอ (ไม่ใช้สีอย่างเดียว)

@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 import weather_core as core
+import weather_now
 
 WEB_DIR = core.ROOT / "web"
 HOURLY_DAYS = 7
@@ -37,7 +38,7 @@ def _rows(table, nd=1):
     return {str(idx): [_num(v, nd) for v in row] for idx, row in zip(table.index, table.values)}
 
 
-def location_payload(result, cfg=None):
+def location_payload(result, cfg=None, obs=None):
     cfg = cfg or core.CFG
     now = result["now"]
     tables = result["tables"]
@@ -85,6 +86,7 @@ def location_payload(result, cfg=None):
                   for b in core.daily_brief_records(tables, result.get("aq"), now, cfg)],
         "hourly": {"time": [t.isoformat() for t in times] if times is not None else [],
                    "series": hourly, "pm25": pm25},
+        "now": weather_now.for_location(result["lat"], result["lon"], obs) if obs else None,
     }
 
 
@@ -94,11 +96,12 @@ def write_site(results, out_dir, cfg=None):
     if WEB_DIR.exists():
         shutil.copytree(WEB_DIR, out, dirs_exist_ok=True)
     (out / "data").mkdir(parents=True, exist_ok=True)
+    obs = weather_now.fetch_all(cfg)            # ค่าวัดจริงจากสถานี ดึงครั้งเดียวใช้ทุกตำแหน่ง
     index = []
     for i, r in enumerate(results):
         fname = f"loc-{i}.json"
         (out / "data" / fname).write_text(
-            json.dumps(location_payload(r, cfg), ensure_ascii=False, allow_nan=False, separators=(",", ":")),
+            json.dumps(location_payload(r, cfg, obs), ensure_ascii=False, allow_nan=False, separators=(",", ":")),
             encoding="utf-8")
         d1 = r["tables"]["rain"].filter(like="D+1").iloc[:, 0] if not r["tables"]["rain"].filter(like="D+1").empty else None
         index.append({"file": fname, "name": r["name"], "lat": r["lat"], "lon": r["lon"],
