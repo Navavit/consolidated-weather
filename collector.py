@@ -59,15 +59,15 @@ def _git(*a, check=True):
 def cmd_sync(args):
     """ดึง branch data จาก GitHub มาไว้ที่ archive/ (git worktree) แล้วนำเข้า SQLite"""
     archive = core.ROOT / "archive"
-    r = _git("fetch", "origin", "data", check=False)
+    r = _git("fetch", "-q", "origin", "+refs/heads/data:refs/remotes/origin/data", check=False)
     if r.returncode != 0:
         print("ดึง branch data ไม่ได้ (ยังไม่มี remote หรือ GitHub Actions ยังไม่เคยรัน)\n" + r.stderr.strip())
         return 1
     if not (archive / ".git").exists():
         _git("worktree", "prune", check=False)
-        _git("worktree", "add", "--detach", str(archive), "FETCH_HEAD")
+        _git("worktree", "add", "-q", "--detach", str(archive), "origin/data")
     else:
-        subprocess.run(["git", "-C", str(archive), "checkout", "--detach", "-q", "FETCH_HEAD"], check=True)
+        subprocess.run(["git", "-C", str(archive), "checkout", "-q", "--detach", "origin/data"], check=True)
     new, total = store.import_archive(archive)
     print(f"นำเข้า {new} รอบใหม่ (ทั้งหมด {total} ไฟล์ใน branch data)")
 
