@@ -40,23 +40,27 @@
 - Common sample: per lead, models with ≥ 90 % coverage; only station-days available for all of them.
 - Rainfall: CSI, ETS, POD, FAR, FBI at 1, 10, 35.1 mm d⁻¹ (TMD categories); MAE; MAE skill vs climatology.
 - Temperature: MAE, bias, MAE skill vs climatology.
-- Urban–rural: difference of means / ETS; **95 % CI by day-block bootstrap** (1,000 resamples; whole days resampled to respect spatial correlation); region-stratified check (within-region differences, weighted).
+- Fair model comparison: paired differences vs a reference model (ECMWF IFS) on identical station-days; bias-insensitive **SEDI** and **frequency-matched ETS** (model-specific threshold giving the observed event frequency) alongside raw ETS, because ETS rewards over-forecasting and MAE rewards under-forecasting.
+- Uncertainty: **two-way bootstrap** resampling days (spatial correlation) *and* stations (few stations per class), 1,000 resamples; Benjamini–Hochberg FDR 5 % across all tests.
+- Urban–rural: difference of means/ETS; confounder control by station-level regression of mean bias on urban class + elevation + log distance to coast + region (stations bootstrapped); rural stations are higher (median 119 vs 29 m) and farther from the sea (145 vs 77 km).
 
-## 4. Results (preliminary: 2024-03 → 2024-10)
-### 4.1 Overall skill
-- Rain ≥ 10 mm, D+1 ETS: ECMWF IFS 0.171 [0.153–0.188] best; ICON/ARPEGE/GFS ≈ 0.147–0.149; GEM 0.117.
-- ECMWF over-forecasts rain days (FBI 1.47) yet has highest ETS; ICON/ARPEGE under-forecast (FBI 0.84–0.89) with lowest MAE.
-- Heavy rain ≥ 35.1 mm: ETS 0.02–0.08 for all models.
-- MAE skill vs climatology for rain amount only 0–17 %.
-- Tmax: all models too cold by 1.5–3.3 °C at all station types → raw Tmax worse than station climatology.
+## 4. Results (interim: 2024-03 → ~2025-05, fairness-adjusted)
+### 4.1 Model ranking — rain ≥ 10 mm (52,033 station-days, main period)
+- D+1: ECMWF IFS ETS 0.192, SEDI 0.536; every other model significantly lower in raw ETS and SEDI (FDR 5 %).
+- **After frequency matching the gap shrinks:** ICON, ARPEGE and GFS are no longer significantly below IFS (IFS over-forecasts rain days, FBI 1.38–1.51); at D+3 ICON ≈ IFS (+0.005 [−0.013, +0.022]).
+- ECCC GEM and CMA GRAPES remain significantly worst under all three scores.
+- Heavy rain ≥ 35.1 mm: ETS 0.03–0.09 for all models.
 
-### 4.2 Urban vs rural (RQ1–RQ2)
-- **Observed nocturnal UHI:** Tmin urban centre − rural = **1.47 °C** (within-region: 1.39 °C).
-- **Models underestimate it:** modelled contrast 0.76–1.30 °C; bias(urban) − bias(rural) = −0.17 to −0.71 °C, **significant for all six core models**; same sign in all 5 regions for ICON and ECMWF IFS.
-- Daytime (Tmax) UHI small (0.49 °C) and not consistently misrepresented.
-- Rain ≥ 10 mm ETS: urban − rural differences −0.02 to +0.004, none significant.
+### 4.2 AI vs physics (2025-03 → , ECMWF AIFS available)
+- **AIFS beats IFS at all leads**: ETS +0.036 (D+1), +0.059 (D+3), +0.053 (D+7); frequency-matched ETS +0.039/+0.046/+0.050; SEDI significant at D+3 and D+7 (D+1 CI [−0.005, +0.098]).
+- AIFS has near-unbiased rain frequency (FBI 1.07–1.19 vs IFS 1.31–1.60), so its advantage is **not** an over-forecasting artefact.
+- Caveat: only one (mostly wet-season) period; AIFS vs IFS at 0.25° open-data resolution.
 
-### 4.3 AI vs physics (2025-03 → 2025-08) ⟨pending⟩
+### 4.3 Urban vs rural (RQ1–RQ2), D+1
+- Observed nocturnal UHI (Tmin urban centre − rural): **1.94 °C [1.03, 2.86]** raw; **0.87 °C [0.27, 1.33]** after controlling elevation, coast distance and region.
+- Model bias(urban) − bias(rural) for Tmin: −0.70 (ICON), −0.95 (GEM), −0.70 (IFS), −0.83 (ARPEGE) °C — **significant after two-way bootstrap + FDR**; GFS (−0.49, p = 0.03) and JMA (−0.25) not significant after FDR.
+- **Confounder-adjusted urban effect on Tmin bias: −0.70 to −1.04 °C** (CI excludes 0 for 5 of 6 models) — about the same size as the adjusted observed UHI, i.e. the models represent **almost none** of the urban night-time warming.
+- Tmax: no significant urban–rural difference in bias. Rain ≥ 10 mm ETS: urban 0.01–0.03 lower, not significant.
 
 ## 5. Discussion
 - Why models miss the nocturnal UHI: grid-box averaging over mixed urban/rural land, simplified or absent urban canopy schemes, 2-m diagnostic assumptions.
