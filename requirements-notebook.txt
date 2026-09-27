@@ -1,0 +1,9 @@
+# สำหรับ notebook (รวม requirements.txt)
+-r requirements.txt
+matplotlib>=3.7
+jinja2
+folium
+branca
+ipywidgets>=8
+ipyleaflet
+jupyter

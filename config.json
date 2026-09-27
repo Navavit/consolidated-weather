@@ -1,0 +1,28 @@
+{
+  "my_location": [
+    13.886,
+    100.439,
+    "ตำแหน่งของฉัน (นนทบุรี)"
+  ],
+  "target_places": [
+    "เชียงใหม่",
+    "ภูเก็ต"
+  ],
+  "hour_windows": [
+    3,
+    6,
+    12,
+    24
+  ],
+  "day_leads": [
+    1,
+    3,
+    7
+  ],
+  "rain_threshold_mm": 1.0,
+  "collect_every_minutes": 60,
+  "verify_window_hours": 3,
+  "verify_threshold_mm": 0.2,
+  "db_path": "data/weather.db",
+  "max_grid_km": null
+}

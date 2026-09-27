@@ -1,0 +1,13 @@
+# ความลับ — ห้ามขึ้น GitHub
+config.local.json
+
+# ข้อมูลในเครื่อง (ข้อมูลจาก GitHub Actions อยู่ใน branch "data")
+data/
+archive/
+outputs/
+logs/
+scripts/*.plist
+
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
