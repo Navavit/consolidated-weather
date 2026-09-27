@@ -38,7 +38,7 @@ jobs:
         run: python collector.py observe-issue --event "$GITHUB_EVENT_PATH" --out archive | tee result.md
 
       - name: บันทึกลง branch data
-        run: scripts/push_data.sh "observation #$ISSUE"
+        run: scripts/push_data.sh "observation-$ISSUE"
 
       - name: ตอบกลับและปิด issue
         run: |
