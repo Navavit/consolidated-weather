@@ -43,6 +43,7 @@ DEFAULT_CONFIG = {
     "verify_window_hours": 3,              # ช่วงเวลารอบเวลาที่สังเกตที่ใช้ตัดสินว่าโมเดล "ทายว่าฝนตก"
     "verify_threshold_mm": 0.2,            # ฝนรวมในช่วงนั้น >= ค่านี้ = โมเดลทายว่าฝนตก
     "db_path": "data/weather.db",
+    "site_order": [],                      # ลำดับแท็บบนหน้าเว็บ (ชื่อตำแหน่ง) ว่าง = ตำแหน่งของฉันก่อน แล้วตามลำดับ target_places
     "max_grid_km": None,                   # ตัดโมเดลที่กริดหยาบกว่านี้ออก เช่น 20 (None = ใช้ทุกโมเดล)
     "tmd_token": "",                       # ใส่ใน config.local.json หรือ env TMD_NWP_TOKEN (ห้ามใส่ใน config.json)
     "google_weather_api_key": "",          # ใส่ใน config.local.json หรือ env GOOGLE_WEATHER_API_KEY (ห้ามใส่ใน config.json)

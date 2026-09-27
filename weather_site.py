@@ -97,6 +97,9 @@ def write_site(results, out_dir, cfg=None):
         shutil.copytree(WEB_DIR, out, dirs_exist_ok=True)
     (out / "data").mkdir(parents=True, exist_ok=True)
     obs = weather_now.fetch_all(cfg)            # ค่าวัดจริงจากสถานี ดึงครั้งเดียวใช้ทุกตำแหน่ง
+    order = list((cfg or core.CFG).get("site_order") or [])
+    rank = lambda r: order.index(r["name"]) if r["name"] in order else len(order)
+    results = sorted(results, key=rank)         # sorted คงลำดับเดิมของตำแหน่งที่ไม่ได้ระบุ
     index = []
     for i, r in enumerate(results):
         fname = f"loc-{i}.json"

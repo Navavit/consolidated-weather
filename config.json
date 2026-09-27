@@ -4,7 +4,13 @@
     100.57739,
     "พระนครศรีอยุธยา"
   ],
-  "target_places": [],
+  "target_places": [
+    [
+      13.75398,
+      100.50144,
+      "กรุงเทพมหานคร"
+    ]
+  ],
   "hour_windows": [
     3,
     6,
@@ -21,5 +27,9 @@
   "verify_window_hours": 3,
   "verify_threshold_mm": 0.2,
   "db_path": "data/weather.db",
-  "max_grid_km": null
+  "max_grid_km": null,
+  "site_order": [
+    "กรุงเทพมหานคร",
+    "พระนครศรีอยุธยา"
+  ]
 }
