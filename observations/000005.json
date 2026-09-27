@@ -1,0 +1,11 @@
+{
+ "obs_time": "2026-09-27 13:35:00",
+ "location": "ตำแหน่งของฉัน (นนทบุรี)",
+ "lat": 13.886,
+ "lon": 100.439,
+ "rained": true,
+ "amount_mm": null,
+ "note": "",
+ "source": "issue#5",
+ "created_at": "2026-09-27 13:35:31"
+}
