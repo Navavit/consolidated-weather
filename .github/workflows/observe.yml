@@ -35,6 +35,7 @@ jobs:
       - run: scripts/data_worktree.sh
 
       - name: อ่านฟอร์ม
+        shell: bash                    # ใช้ pipefail เพื่อไม่ให้ | tee กลบ error ของ python
         run: python collector.py observe-issue --event "$GITHUB_EVENT_PATH" --out archive | tee result.md
 
       - name: บันทึกลง branch data
