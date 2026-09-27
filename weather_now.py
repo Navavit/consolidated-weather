@@ -10,6 +10,8 @@ import math
 import xml.etree.ElementTree as ET
 
 import pandas as pd
+import requests
+import urllib3
 
 import weather_core as core
 
@@ -62,7 +64,13 @@ def fetch_tmd_stations(cfg=None):
 
 def fetch_air4thai():
     """PM2.5 ล่าสุดของสถานีตรวจวัดคุณภาพอากาศ (กรมควบคุมมลพิษ)"""
-    r = core.SESSION.get(AIR4THAI_URL, timeout=60)
+    try:
+        r = core.SESSION.get(AIR4THAI_URL, timeout=60)
+    except requests.exceptions.SSLError:
+        # เว็บ Air4Thai ส่ง certificate chain ไม่ครบ (ขาด intermediate) บาง OS จึงตรวจไม่ผ่าน
+        # ข้อมูลเป็นค่าสาธารณะแบบอ่านอย่างเดียว ไม่มีการส่งข้อมูลลับ จึงยอมดึงแบบไม่ตรวจ cert เฉพาะแหล่งนี้
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        r = core.SESSION.get(AIR4THAI_URL, timeout=60, verify=False)
     r.raise_for_status()
     out = []
     for s in r.json().get("stations", []):
