@@ -1,0 +1,11 @@
+{
+ "obs_time": "2026-09-28 06:59:00",
+ "location": "กรุงเทพมหานคร",
+ "lat": 13.75398,
+ "lon": 100.50144,
+ "rained": false,
+ "amount_mm": null,
+ "note": "",
+ "source": "issue#8",
+ "created_at": "2026-09-28 06:59:55"
+}
