@@ -110,6 +110,19 @@ def fetch_thaiwater_rain24():
     return out
 
 
+THAIWATER_HOURLY_URL = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/rain_24h_graph"
+
+
+def fetch_thaiwater_hourly(station_id):
+    """ฝนรายชั่วโมงของเครื่องวัดโทรมาตร 1 สถานี (ย้อนหลัง ~36 ชม. · ThaiWater ไม่มีประวัติรายชั่วโมงเก่ากว่านี้)
+    rain_1h ที่เวลา t = ฝนใน (t-1h, t] (เวลาไทย)"""
+    r = core.SESSION.get(THAIWATER_HOURLY_URL, params={"station_type": "tele_station", "station_id": station_id},
+                         timeout=60, headers={"User-Agent": "consolidated-weather"})
+    r.raise_for_status()
+    return [{"id": str(station_id), "time": pd.Timestamp(x["rainfall_datetime"]).isoformat(), "rain_1h": _f(x["rainfall_value"])}
+            for x in r.json().get("data", []) if _f(x.get("rainfall_value")) is not None]
+
+
 def fetch_air4thai():
     """PM2.5 ล่าสุดของสถานีตรวจวัดคุณภาพอากาศ (กรมควบคุมมลพิษ)"""
     try:

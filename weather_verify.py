@@ -9,7 +9,8 @@
 โครงสร้างใน branch data (archive/)
   obs/tmd3h/YYYY-MM-DD.csv     ค่าวัดราย 3 ชม. ทุกสถานีอุตุฯ (~120)
   obs/tmdday/YYYY-MM-DD.csv    สรุป 07 น. ทุกสถานีอุตุฯ (~124) ใช้กับส่วนทั่วประเทศ
-  obs/thaiwater/YYYY-MM-DD.csv เครื่องวัดฝนโทรมาตร เฉพาะจุดตรวจ
+  obs/thaiwater/YYYY-MM-DD.csv เครื่องวัดฝนโทรมาตร เฉพาะจุดตรวจ (ฝน 24 ชม.)
+  obs/tw1h/YYYY-MM-DD.csv      ฝนรายชั่วโมงของโทรมาตรจุดตรวจ (ใช้ทำฝนราย 3 ชม.)
   verification/points.json                                 จุดตรวจ (สถานีที่ใกล้ตำแหน่งของผู้ใช้) — คงที่เมื่อเลือกแล้ว
   verification/pairs/YYYY-MM.csv.gz                       คู่ (พยากรณ์, ค่าวัด) ทุกโมเดลทุกช่วงเวลาล่วงหน้า
   verification/national_done.json                         วันที่คำนวณ national แล้ว
@@ -42,6 +43,7 @@ SECTIONS = {
     "hii24h_rain": {"title": "ฝนรายวัน 19–19 น. · เทียบ HII WRF-ROMS กับโมเดลอื่น (เครื่องวัดฝน ThaiWater)",
                     "variable": "rain", "source": "hii24h"},
     "user_rain": {"title": "ฝนตก/ไม่ตก · จากปุ่มบนหน้าเว็บ", "variable": "rain", "source": "user"},
+    "tw3h_rain": {"title": "ฝนราย 3 ชม. · เครื่องวัดฝนใกล้ตำแหน่งของคุณ (ThaiWater รายชั่วโมง)", "variable": "rain", "source": "tw3h"},
     "tmd3h_temp": {"title": "อุณหภูมิ · สถานีอุตุฯ ใกล้ตำแหน่งของคุณ", "variable": "temp", "source": "tmd3h"},
     "national3h_rain": {"title": "ฝนราย 3 ชม. · สถานีอุตุฯ ทั่วประเทศ", "variable": "rain", "source": "national3h"},
     "national3h_temp": {"title": "อุณหภูมิราย 3 ชม. · สถานีอุตุฯ ทั่วประเทศ", "variable": "temp", "source": "national3h"},
@@ -217,18 +219,40 @@ def _rec(source, point, T, variable, model, kind, init, fc, ob, lead, thr=None, 
 
 
 def pairs_tmd3h(archive, points, cfg=None):
-    """ฝน 3 ชม. (T-3h, T] และอุณหภูมิ ณ T ที่สถานีอุตุฯ ใกล้ตำแหน่ง
+    """ฝน 3 ชม. (T-3h, T] และอุณหภูมิ ณ T ที่สถานีอุตุฯ ใกล้ตำแหน่ง"""
+    return _pairs_3h(archive, points, load_obs(archive, "tmd3h"), "tmd", "tmd3h", cfg)
 
-    ช่วงล่วงหน้า = T+ ชม. จากเวลาเริ่มรันถึงปลายช่วง (T) · ใช้เฉพาะรอบที่ดึงมาแล้วก่อนเริ่มช่วงวัด
-    """
+
+def tw3h_obs(archive):
+    """ฝนราย 3 ชม. จากฝนรายชั่วโมงของโทรมาตร: ช่วง (T-3h, T] ที่ T = 01, 04, 07, … น. (= เวลา synoptic 18, 21, 00 UTC …)
+    ใช้เฉพาะช่วงที่มีครบ 3 ชั่วโมง"""
+    h = load_obs(archive, "tw1h")
+    if h.empty:
+        return h
+    out = []
+    for sid, g in h.groupby("id"):
+        s = g.drop_duplicates("time", keep="last").set_index("time")["rain_1h"].sort_index()
+        s = s.reindex(pd.date_range(s.index.min().floor("h"), s.index.max(), freq="h"))
+        r3 = s.rolling(3, min_periods=3).sum()
+        r3 = r3[(r3.index.hour % 3 == 1) & r3.notna()]
+        out.append(pd.DataFrame({"id": sid, "time": r3.index, "rain_3h": r3.values}))
+    return pd.concat(out, ignore_index=True) if out else pd.DataFrame()
+
+
+def pairs_tw3h(archive, points, cfg=None):
+    """ฝน 3 ชม. ที่เครื่องวัดโทรมาตรจุดตรวจ (หนาแน่นใน กทม.) ช่วงเดียวกับสถานีอุตุฯ"""
+    return _pairs_3h(archive, points, tw3h_obs(archive), "tw", "tw3h", cfg, ens=False)
+
+
+def _pairs_3h(archive, points, obs, kind, source, cfg=None, ens=True):
+    """ช่วงล่วงหน้า = T+ ชม. จากเวลาเริ่มรันถึงปลายช่วง (T) · ใช้เฉพาะรอบที่ดึงมาแล้วก่อนเริ่มช่วงวัด"""
     cfg = cfg or core.CFG
-    obs = load_obs(archive, "tmd3h")
     if obs.empty:
         return []
-    ens_ok = int(cfg["verify_window_hours"]) == 3      # ens_prob ที่เก็บไว้เป็นหน้าต่าง 3 ชม. ที่ชั่วโมงกลาง
+    ens_ok = ens and int(cfg["verify_window_hours"]) == 3      # ens_prob ที่เก็บไว้เป็นหน้าต่าง 3 ชม. ที่ชั่วโมงกลาง
     thr = cfg["verify_threshold_mm"]
     recs = []
-    for p in (p for p in points if p["kind"] == "tmd"):
+    for p in (p for p in points if p["kind"] == kind):
         o = obs[obs["id"] == str(p["id"])]
         runs = load_point_runs(archive, p["lat"], p["lon"])
         if o.empty or not runs:
@@ -248,17 +272,17 @@ def pairs_tmd3h(archive, points, cfg=None):
                     if source == "det_mm" and pd.notna(rain) and fetched <= start:
                         fc = _window(wide, col, hours)
                         if fc is not None:
-                            recs.append(_rec("tmd3h", p["name"], T, "rain", model, "det", init, fc, float(rain), lead, thr))
+                            recs.append(_rec(source, p["name"], T, "rain", model, "det", init, fc, float(rain), lead, thr))
                     elif source == "ens_prob" and ens_ok and pd.notna(rain) and fetched <= start:
                         c = T - pd.Timedelta(hours=1)
                         if c in wide.index and pd.notna(wide.at[c, col]):
                             prob = float(wide.at[c, col])
-                            recs.append(_rec("tmd3h", p["name"], T, "rain", model, "ens", init, prob, float(rain), lead,
+                            recs.append(_rec(source, p["name"], T, "rain", model, "ens", init, prob, float(rain), lead,
                                              thr, ev_fc=prob >= 50))
                     elif source == "det_t" and pd.notna(temp) and fetched < T and T in wide.index:
                         v = wide.at[T, col]
                         if pd.notna(v):
-                            recs.append(_rec("tmd3h", p["name"], T, "temp", model, "det", init, float(v), float(temp), lead))
+                            recs.append(_rec(source, p["name"], T, "temp", model, "det", init, float(v), float(temp), lead))
     return recs
 
 
@@ -539,7 +563,7 @@ def leaderboard(archive, days=30, cfg=None):
     current_points = {p["name"] for p in points}
     for sid, spec in SECTIONS.items():
         g = pairs[(pairs["source"] == spec["source"]) & (pairs["variable"] == spec["variable"])] if not pairs.empty else pairs
-        if spec["source"] in ("tmd3h", "thaiwater24h") and not g.empty:
+        if spec["source"] in ("tmd3h", "tw3h", "thaiwater24h", "hii24h") and not g.empty:
             g = g[g["point"].isin(current_points)]          # เฉพาะจุดตรวจของตำแหน่งที่ยังอยู่ใน config
             g = g[g["scheme"] == SCHEME]                     # เฉพาะช่วงล่วงหน้าแบบสากล (นับจากเวลาเริ่มรัน)
         # จัดอันดับแยกตามช่วงเวลาล่วงหน้า: แต่ละโมเดลพยากรณ์ไปได้ไกลไม่เท่ากัน ถ้ารวมทุกช่วง
@@ -617,6 +641,14 @@ def update(archive, locations, cfg=None, site_dir=None):
     archive_obs(archive, obs["tmd3h"], "tmd3h")                              # ทุกสถานี (ใช้กับส่วนทั่วประเทศราย 3 ชม.)
     archive_obs(archive, obs["tmdday"], "tmdday")
     archive_obs(archive, [g for g in obs["thaiwater"] if str(g["id"]) in tw_ids], "thaiwater")
+    # ฝนรายชั่วโมงของโทรมาตรจุดตรวจ (ThaiWater เก็บย้อนหลังแค่ ~36 ชม. จึงต้องเก็บเองทุกรอบ)
+    hourly = []
+    for sid in sorted(tw_ids):
+        try:
+            hourly += weather_now.fetch_thaiwater_hourly(sid)
+        except Exception as e:
+            print(f"⚠️ ฝนรายชั่วโมง {sid}: {e}")
+    archive_obs(archive, hourly, "tw1h")
     log = collect_points(points, archive, cfg, google_for=locations[0][2] if locations else None)
     print(log.to_string(index=False))
     # HII WRF-ROMS: ภาพออกวันละรอบ (19:00 น.) อ่านค่าครั้งเดียวต่อรอบ ที่ตำแหน่งของผู้ใช้และเครื่องวัดฝน
@@ -628,7 +660,7 @@ def update(archive, locations, cfg=None, site_dir=None):
         print(f"⚠️ HII: {e}")
         hii_init, hii_df = None, pd.DataFrame()
     n = 0
-    for fn in (pairs_tmd3h, pairs_thaiwater24h, pairs_hii24h, pairs_national, pairs_user):
+    for fn in (pairs_tmd3h, pairs_tw3h, pairs_thaiwater24h, pairs_hii24h, pairs_national, pairs_user):
         try:
             n += save_pairs(archive, fn(archive, cfg=cfg) if fn in (pairs_national, pairs_user) else fn(archive, points, cfg))
         except Exception as e:

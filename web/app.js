@@ -609,8 +609,8 @@ const V_SOURCES = [
   { key: "tmd3h", icon: "📡", title: "สถานีอุตุฯ ใกล้ตำแหน่ง", desc: "ฝนทุก 3 ชม. และอุณหภูมิ",
     vars: [["tmd3h_rain", "ฝน 3 ชม."], ["tmd3h_temp", "อุณหภูมิ"]], kind: "tmd",
     wait: "ใช้เฉพาะรอบรันที่ออกก่อนต้นช่วงวัด สถานีวัดทุก 3 ชม." },
-  { key: "thaiwater24h", icon: "🌧️", title: "เครื่องวัดฝนใกล้ตำแหน่ง", desc: "ฝนรายวัน (ThaiWater · สสน.)",
-    vars: [["thaiwater24h_rain", "ฝนรายวัน"]], kind: "tw",
+  { key: "thaiwater24h", icon: "🌧️", title: "เครื่องวัดฝนใกล้ตำแหน่ง", desc: "ฝนรายวันและราย 3 ชม. (ThaiWater · สสน.)",
+    vars: [["thaiwater24h_rain", "ฝนรายวัน"], ["tw3h_rain", "ฝน 3 ชม."]], kind: "tw",
     wait: "ใช้ฝน 24 ชม. 07–07 น. (00–00 UTC) จากรอบรันที่ออกก่อนเริ่มวัน ผลแรกมาหลังเก็บข้อมูล 2 วัน" },
   { key: "hii24h", icon: "🌊", title: "HII เทียบโมเดลอื่น", desc: "ฝน 19–19 น. ที่เครื่องวัดฝน (ช่วงเดียวกับ สสน.)",
     vars: [["hii24h_rain", "ฝน 19–19 น."]], kind: "tw",
@@ -724,7 +724,7 @@ function renderVerify() {
         ...["Brier (ต่ำดี)", "ทายถูก %", "POD %", "FAR %", "n"].map((h) => el("th", {}, h)))),
       el("tbody", {}, ens.map((r) => el("tr", {}, el("th", { scope: "row" }, r.model),
         ...["brier", "acc", "pod", "far", "n"].map((k) => el("td", { class: "num" }, r[k] == null ? "–" : fmt(r[k], k === "brier" ? 3 : k === "n" ? 0 : 1)))))))] : []));
-    const thr = !rain ? "" : ["tmd3h", "user", "national3h"].includes(pick.source) ? "นับว่า “ฝนตก” เมื่อ ≥ 0.2 มม. ใน 3 ชม." : "นับว่า “ฝนตก” เมื่อ ≥ 1 มม. ต่อวัน";
+    const thr = !rain ? "" : ["tmd3h", "tw3h", "user", "national3h"].includes(pick.source) ? "นับว่า “ฝนตก” เมื่อ ≥ 0.2 มม. ใน 3 ชม." : "นับว่า “ฝนตก” เมื่อ ≥ 1 มม. ต่อวัน";
     $("v-note").textContent = `ค่าวัด ${pick.n_obs.toLocaleString("th-TH")} ครั้ง จาก ${pick.n_points} จุด${thr ? " · " + thr : ""}`;
   }
   const pts = (V.points || []).filter((p) => !src.kind || p.kind === src.kind);
