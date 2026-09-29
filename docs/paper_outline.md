@@ -69,11 +69,14 @@
 - **Confounder-adjusted urban effect on Tmin bias: −0.70 to −1.04 °C** (CI excludes 0 for 5 of 6 models) — about the same size as the adjusted observed UHI, i.e. the models represent **almost none** of the urban night-time warming.
 - Tmax: no significant urban–rural difference in bias. Rain ≥ 10 mm ETS: urban 0.01–0.03 lower, not significant.
 
-### 4.4 Diurnal cycle of the urban heat island (ISD 3-hourly, lead ≥ 24 h) — interim 2024-03 → 2024-08
-- Observed urban-centre − rural T (raw): +1.65 °C (01, 04 local), **+1.79 °C (07)**, minimum +0.89 °C (13); two-way bootstrap CIs exclude 0 at all hours.
-- Models: +0.9 to +1.2 °C at night (IFS, ICON, GEM, ARPEGE); urban − rural bias difference significant at 19–10 local for IFS/ICON/GEM/ARPEGE, not at 13–16 local
-  → the missing warmth is concentrated at night and early morning (nocturnal UHI), consistent with 4.3. Figure 5.
-- ⟨final numbers once the hourly forecast refetch completes; add confounder-adjusted version at 01/04 local⟩
+### 4.4 Diurnal cycle of the urban heat island (ISD 3-hourly, lead ≥ 24 h, 2024-03 → 2025-08)
+- Common sample: 6 models with ≥ 90 % coverage (ICON, GEM, IFS, JMA, ARPEGE, GFS); AIFS (36 %) and UKMO (43 %) excluded from this analysis.
+- Observed urban-centre − rural T (raw, 25 vs 36 stations): **+1.65 (01), +1.61 (04), +1.75 (07)** °C at night/early morning, minimum **+0.91 °C (13)**; two-way bootstrap 95 % CIs exclude 0 at all hours.
+- Modelled contrast: +0.8–1.1 °C at night (IFS +1.10, ICON +1.04, ARPEGE +0.99, GEM +0.81 at 01) → **0.5–0.8 °C of the nocturnal contrast is missing**.
+  The urban − rural bias difference is significant at 19–10 local for IFS, ICON, GEM and ARPEGE, but not at 13–16 local (except ARPEGE, JMA).
+  → the models' urban deficit is a night-time/early-morning phenomenon, consistent with the Tmin result in 4.3 (Figure 5).
+- Temperature MAE (lead ≥ 24 h) is lowest at 07 local (1.0–1.4 °C) and highest at 16 local (1.7–2.6 °C); most models are too cold (IFS −1.5 °C at 16), ARPEGE is too warm at night (+0.9–1.0 °C).
+- ⟨todo: confounder-adjusted version (elevation, coast, region) at 01/04 local⟩
 
 ## 5. Discussion
 - Why models miss the nocturnal UHI: grid-box averaging over mixed urban/rural land, simplified or absent urban canopy schemes, 2-m diagnostic assumptions.
