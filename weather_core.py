@@ -541,7 +541,7 @@ def window_masks(index, now, cfg=None, kinds=("hour", "day")):
 
     ค่า precipitation ที่เวลา t คือฝนใน (t-1h, t] ดังนั้น
       +N ชม. = เวลา (now, now+N]
-      D+N    = เวลา (00:00, 24:00] ของวันนั้น (รวม 01:00..24:00)
+      D+N    = วันอุตุนิยมวิทยา (07:00, 07:00 วันถัดไป] ตาม day_start_hour (= 00–00 UTC)
     """
     cfg = cfg or CFG
     masks = {}

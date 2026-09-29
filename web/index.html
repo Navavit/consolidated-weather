@@ -40,8 +40,17 @@
     <p class="note" id="gps-note" hidden>📍 คำนวณพยากรณ์ตรงพิกัดของคุณในเบราว์เซอร์ (ไม่ส่งพิกัดไปเก็บที่ไหน) · ใช้โมเดลระดับโลกทุกตัว + ensemble ·
       ไม่มี TMD WRF และ Google Weather (ต้องใช้ key) · ค่าวัดจริงใช้สถานีที่ใกล้คุณที่สุด</p>
 
-    <section aria-labelledby="h-now">
-      <h2 id="h-now">ตอนนี้ <small>ค่าวัดจริงจากสถานีใกล้ที่สุด + ค่าจากโมเดล</small></h2>
+    <nav class="steps" id="steps" aria-label="ลำดับเนื้อหา">
+      <a href="#step-1"><b>①</b> ตอนนี้</a>
+      <a href="#step-2"><b>②</b> พยากรณ์</a>
+      <a href="#step-3"><b>③</b> แยกแหล่ง</a>
+      <a href="#step-4"><b>④</b> รายชั่วโมง</a>
+      <a href="#step-5"><b>⑤</b> ที่มา + ความแม่น</a>
+    </nav>
+    <p class="note timebase" id="timebase"></p>
+
+    <section id="step-1" aria-labelledby="h-now">
+      <h2 id="h-now"><span class="step-no" aria-hidden="true">①</span> ตอนนี้ <small>ค่าวัดจริงจากสถานีใกล้ที่สุด + ค่าจากโมเดล</small></h2>
       <div class="cards" id="now"></div>
       <div class="radar-card">
         <div class="radar-head">
@@ -53,14 +62,55 @@
       </div>
     </section>
 
+    <section id="step-2" aria-labelledby="h-next">
+      <h2 id="h-next"><span class="step-no" aria-hidden="true">②</span> ฝนชั่วโมงถัดไป <small>ฝนสะสมนับจากเวลาที่ดึงพยากรณ์ · ค่ากลางของทุกโมเดล</small></h2>
+      <div class="tiles" id="next"></div>
+    </section>
+
     <section aria-labelledby="h-brief">
-      <h2 id="h-brief">สรุปรายวัน <small>ค่ากลาง (median) ของทุกโมเดล</small></h2>
+      <h2 id="h-brief">สรุปรายวัน <small>1 วัน = 07:00 → 07:00 น. · ค่ากลาง (median) ของทุกโมเดล</small></h2>
       <div class="cards" id="brief"></div>
     </section>
 
-    <section aria-labelledby="h-next">
-      <h2 id="h-next">ฝนช่วงถัดไป <small>ฝนสะสมตั้งแต่ตอนนี้</small></h2>
-      <div class="tiles" id="next"></div>
+    <section id="step-3" aria-labelledby="h-rain">
+      <h2 id="h-rain"><span class="step-no" aria-hidden="true">③</span> ฝนแยกโมเดล (มม.) <small>ช่วงเวลาเดียวกับ ② · เรียงจากละเอียดไปหยาบ</small></h2>
+      <div class="table-wrap" id="rain-table"></div>
+      <p class="note" id="rain-note"></p>
+    </section>
+
+    <section aria-labelledby="h-ens">
+      <h2 id="h-ens">โอกาสฝนจาก ensemble (%) <small id="ens-sub"></small></h2>
+      <div class="table-wrap" id="ens-table"></div>
+    </section>
+
+    <section aria-labelledby="h-hii" id="hii-section" hidden>
+      <h2 id="h-hii">🌊 HII WRF-ROMS (สสน.) <small id="hii-sub">สสน. (สถาบันสารสนเทศทรัพยากรน้ำ)</small></h2>
+      <div class="tiles" id="hii-tiles"></div>
+      <p class="note" id="hii-note"></p>
+    </section>
+
+    <section aria-labelledby="h-params">
+      <h2 id="h-params">พารามิเตอร์อื่นแยกโมเดล <small>ช่วงเวลาเดียวกับตารางฝน</small></h2>
+      <label class="select"><span>พารามิเตอร์</span><select id="param"></select></label>
+      <div class="table-wrap" id="param-table"></div>
+    </section>
+
+    <section id="step-4" aria-labelledby="h-charts">
+      <div class="section-head">
+        <h2 id="h-charts"><span class="step-no" aria-hidden="true">④</span> รายชั่วโมง 7 วัน</h2>
+        <label class="select">
+          <span>เส้นสีส้ม = โมเดล</span>
+          <select id="highlight"></select>
+        </label>
+      </div>
+      <div class="charts" id="charts"></div>
+    </section>
+
+    <section id="step-5" aria-labelledby="h-runs">
+      <h2 id="h-runs"><span class="step-no" aria-hidden="true">⑤</span> ที่มา: รอบรันของแต่ละโมเดล <small id="runs-sub">ข้อมูลในหน้านี้มาจากรอบไหน</small></h2>
+      <div class="table-wrap" id="runs-table"></div>
+      <p class="note">รอบรัน (init) = เวลาที่โมเดลเริ่มคำนวณ · <b>ยืนยันแล้ว</b> = อ่านจาก metadata ของ Open-Meteo · <b>ประมาณ</b> = คำนวณจากตารางรอบรันและเวลาที่ผลมักออก ·
+        Google อัปเดตต่อเนื่อง ไม่มีรอบรัน</p>
     </section>
 
     <section aria-labelledby="h-verify" class="verify">
@@ -117,7 +167,7 @@
         <summary>⏱️ กรอบเวลาแบบสากล: นับ “ล่วงหน้า” อย่างไร</summary>
         <ul>
           <li>โมเดลไม่ได้คำนวณใหม่ทุกชั่วโมง แต่รันเป็น <b>รอบ (init / cycle)</b> ที่ 00, 06, 12, 18 UTC (= 07:00, 13:00, 19:00, 01:00 น.) บางโมเดลวันละ 2 รอบ
-            และผลออกมาหลังเริ่มรัน 3–10 ชม. ดังนั้นพยากรณ์ที่ “ดึงมาตอนนี้” อาจเป็นของรอบเมื่อหลายชั่วโมงก่อน (ดู “🕐 รอบรันของแต่ละโมเดล” ด้านล่าง)</li>
+            และผลออกมาหลังเริ่มรัน 3–10 ชม. ดังนั้นพยากรณ์ที่ “ดึงมาตอนนี้” อาจเป็นของรอบเมื่อหลายชั่วโมงก่อน (ดูตาราง “⑤ รอบรันของแต่ละโมเดล” ด้านบน)</li>
           <li><b>ช่วงล่วงหน้า = T+ ชม.</b> นับจากเวลาเริ่มรันถึงปลายช่วงที่วัด ตามแนวทาง WMO (เดิมนับจากเวลาที่ดึง ซึ่งทำให้โมเดลที่ออกช้าเสียเปรียบ)
             · ฝนราย 3 ชม./อุณหภูมิ จัดกลุ่มเป็น T+0–6, 6–12, 12–24, 24–48, 48–72, 72–120, 120–168, 168–240 ชม.</li>
           <li><b>วันพยากรณ์ Day N</b> = ฝน 24 ชม. 07:00–07:00 น. (= 00–00 UTC วันอุตุนิยมวิทยาของไทยและ WMO) ที่ปลายช่วงห่างจากเวลาเริ่มรัน 24N ± 12 ชม.
@@ -146,47 +196,6 @@
             <tr><td>ตรวจย้อนหลังสำหรับงานวิจัย</td><td>NOAA GSOD (124 สถานี) + Open-Meteo Previous Runs · WorldPop 2020</td><td>ม.ค. 2024 – 24 ส.ค. 2025 (ค่าปกติ 2000–2023)</td><td>ดึงครั้งเดียว (<code>analysis/</code>) · ใช้พิกัดสถานีจาก GSOD</td></tr>
           </tbody></table></div>
       </details>
-    </section>
-
-    <section aria-labelledby="h-runs">
-      <h2 id="h-runs">🕐 รอบรันของแต่ละโมเดล <small id="runs-sub">ข้อมูลในหน้านี้มาจากรอบไหน</small></h2>
-      <div class="table-wrap" id="runs-table"></div>
-      <p class="note">รอบรัน (init) = เวลาที่โมเดลเริ่มคำนวณ · <b>ยืนยันแล้ว</b> = อ่านจาก metadata ของ Open-Meteo · <b>ประมาณ</b> = คำนวณจากตารางรอบรันและเวลาที่ผลมักออก ·
-        Google อัปเดตต่อเนื่อง ไม่มีรอบรัน</p>
-    </section>
-
-    <section aria-labelledby="h-rain">
-      <h2 id="h-rain">ฝนแยกโมเดล (มม.) <small>เรียงจากโมเดลละเอียดสูงไปหยาบ</small></h2>
-      <div class="table-wrap" id="rain-table"></div>
-      <p class="note" id="rain-note"></p>
-    </section>
-
-    <section aria-labelledby="h-hii" id="hii-section" hidden>
-      <h2 id="h-hii">🌊 HII WRF-ROMS 7 วัน <small id="hii-sub">สสน. (สถาบันสารสนเทศทรัพยากรน้ำ)</small></h2>
-      <div class="tiles" id="hii-tiles"></div>
-      <p class="note" id="hii-note"></p>
-    </section>
-
-    <section aria-labelledby="h-ens">
-      <h2 id="h-ens">โอกาสฝนจาก ensemble (%) <small id="ens-sub"></small></h2>
-      <div class="table-wrap" id="ens-table"></div>
-    </section>
-
-    <section aria-labelledby="h-charts">
-      <div class="section-head">
-        <h2 id="h-charts">รายชั่วโมง 7 วัน</h2>
-        <label class="select">
-          <span>เส้นสีส้ม = โมเดล</span>
-          <select id="highlight"></select>
-        </label>
-      </div>
-      <div class="charts" id="charts"></div>
-    </section>
-
-    <section aria-labelledby="h-params">
-      <h2 id="h-params">พารามิเตอร์อื่นแยกโมเดล</h2>
-      <label class="select"><span>พารามิเตอร์</span><select id="param"></select></label>
-      <div class="table-wrap" id="param-table"></div>
     </section>
 
     <section id="about" aria-labelledby="h-about">

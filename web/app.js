@@ -143,6 +143,7 @@ async function init() {
   }).catch(() => {
     $("v-note").textContent = "ยังไม่มีข้อมูล — ระบบเริ่มเก็บค่าวัดจากสถานีแล้ว ผลจะเริ่มแสดงในไม่กี่ชั่วโมง";
   });
+  state.meta = await getJSON("data/meta.json").catch(() => null);
   const saved = parseInt(store.get("loc") || "0", 10);
   renderChips();
   initMap();
@@ -253,6 +254,7 @@ function showLocation() {
 }
 
 function renderAll() {
+  renderTimebase();
   renderRainBar();
   renderNow();
   renderBrief();
@@ -274,6 +276,42 @@ const naiveMs = (s) => Date.parse(s.length === 16 ? `${s}:00Z` : `${s}Z`);   // 
 const median = (a) => { const v = a.filter((x) => x != null).sort((x, y) => x - y); const n = v.length;
   return n ? (n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2) : null; };
 const pickLevel = (v, table) => (v == null || Number.isNaN(v) ? "–" : table.find(([lim]) => v < lim)[1]);
+// ---------------------------------------------------------------------------
+// ป้ายเวลาเดียวกันทั้งหน้า: ทุกตาราง/การ์ดใช้เวลาอ้างอิงเดียวกัน (เวลาที่ดึงพยากรณ์) และวัน 07:00 → 07:00 น.
+// ---------------------------------------------------------------------------
+const dayStart = () => state.meta?.day_start_hour ?? 7;
+const baseMs = (L = state.loc) => (L?.fetched_at ? naiveMs(L.fetched_at.slice(0, 16)) : null);
+const pad2 = (n) => String(n).padStart(2, "0");
+const hhmmMs = (ms) => { const d = new Date(ms); return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`; };
+const dMon = (ms) => new Date(ms).toLocaleDateString("th-TH", { timeZone: "UTC", day: "numeric", month: "short" });
+const dayWord = (ms, base) => {
+  const dd = Math.round((Date.UTC(...ymd(ms)) - Date.UTC(...ymd(base))) / DAY);
+  return dd === 0 ? "วันนี้" : dd === 1 ? "พรุ่งนี้" : dMon(ms);
+};
+function ymd(ms) { const d = new Date(ms); return [d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()]; }
+/** ช่วงเวลา "+N ชม." / "D+N (dd/mm)" → {top, sub, start, end} (เวลาท้องถิ่นแบบ naive ms) */
+function winInfo(w, L = state.loc) {
+  const base = baseMs(L);
+  let m = /^\+(\d+)/.exec(w);
+  if (m && base != null) {
+    const end = base + m[1] * HOUR;
+    return { top: `+${m[1]} ชม.`, sub: `ถึง ${dayWord(end, base) === "วันนี้" ? "" : dayWord(end, base) + " "}${hhmmMs(end)}`, start: base, end };
+  }
+  m = /^D\+(\d+)/.exec(w);
+  if (m && base != null) {
+    const h0 = dayStart() * HOUR, today = base - ((base - h0) % DAY + DAY) % DAY, start = today + m[1] * DAY;
+    return { top: m[1] === "1" ? "พรุ่งนี้ (D+1)" : `D+${m[1]}`, sub: `${dMon(start)} ${pad2(dayStart())}:00 → ${dMon(start + DAY)}`, start, end: start + DAY };
+  }
+  return { top: w, sub: "" };
+}
+const winHead = (w) => { const i = winInfo(w); return [i.top, i.sub ? el("span", { class: "wsub" }, i.sub) : null]; };
+function renderTimebase() {
+  const L = state.loc, base = baseMs(L);
+  $("timebase").textContent = base == null ? "" :
+    `⏱️ เวลาอ้างอิงของพยากรณ์ทั้งหน้า: ${dMon(base)} ${hhmmMs(base)} น. · “+N ชม.” นับจากเวลานี้ · 1 วัน = ${pad2(dayStart())}:00 → ${pad2(dayStart())}:00 น. (ตรงกับค่าวัดรายวันของกรมอุตุฯ) · ` +
+    `HII ใช้ 19:00 → 19:00 น. · ที่มาและรอบรันดูที่ ⑤`;
+}
+
 const HEAT_LV = [[27, "🟢 ปกติ"], [33, "🟡 เฝ้าระวัง"], [42, "🟠 เตือนภัย"], [52, "🔴 อันตราย"], [Infinity, "🟣 อันตรายมาก"]];
 const UV_LV = [[3, "🟢 ต่ำ"], [6, "🟡 ปานกลาง"], [8, "🟠 สูง"], [11, "🔴 สูงมาก"], [Infinity, "🟣 อันตราย"]];
 const PM_LV = [[15.01, "🔵 ดีมาก"], [25.01, "🟢 ดี"], [37.51, "🟡 ปานกลาง"], [75.01, "🟠 เริ่มมีผลต่อสุขภาพ"], [Infinity, "🔴 มีผลต่อสุขภาพ"]];
@@ -395,7 +433,7 @@ async function buildLocalPayload(lat, lon) {
     return best && bd <= M.max_station_km ? { ...best, dist_km: Math.round(bd * 10) / 10 } : null;
   };
   return {
-    name: "📍 ตรงที่ฉันอยู่", lat, lon, threshold_mm: thr,
+    name: "📍 ตรงที่ฉันอยู่", lat, lon, threshold_mm: thr, fetched_at: new Date(now).toISOString().slice(0, 19),
     windows: wins.map((w) => w.label),
     models: Object.keys(data.precipitation).map((n) => ({ name: n, grid_km: (M.models.find((m) => m.name === n) || {}).grid_km })),
     tables, consensus, ensemble, brief,
@@ -705,7 +743,7 @@ function renderRuns() {
   const hiiRun = state.hii ? { init: state.hii.init_utc.replace(" ", "T"), source: "hii" } : null;
   const SRC = { meta: "✓ ยืนยันแล้ว", estimated: "≈ ประมาณ", continuous: "ต่อเนื่อง", hii: "✓ จากภาพ สสน." };
   const fetched = L.fetched_at ? naiveMs(L.fetched_at.slice(0, 16)) - 7 * HOUR : Date.now();                     // เวลาที่ดึง (UTC)
-  $("runs-sub").textContent = rows.length ? `ดึงเมื่อ ${thTime(fetched)} น.` : "ตำแหน่งนี้คำนวณในเบราว์เซอร์ ใช้รอบล่าสุดของ Open-Meteo";
+  $("runs-sub").textContent = rows.length ? `ดึงเมื่อ ${thTime(fetched)} น. (เวลาอ้างอิงของหน้านี้)` : "ตำแหน่งนี้คำนวณในเบราว์เซอร์ ใช้รอบล่าสุดของ Open-Meteo";
   $("runs-table").replaceChildren(...(rows.length ? [el("table", {},
     el("thead", {}, el("tr", {}, ...["โมเดล", "รอบรัน (UTC)", "เวลาไทย", "อายุรอบ ณ เวลาดึง", "ที่มา"].map((h, i) =>
       el("th", { style: i === 0 ? "text-align:left" : null }, h)))),
@@ -736,14 +774,20 @@ function renderHii() {
   if (!days) return;
   const init = naiveMs(H.init_utc.replace(" ", "T").slice(0, 16));
   $("hii-sub").textContent = `รอบรัน ${new Date(init).toISOString().slice(0, 16).replace("T", " ")}Z (${thTime(init)} น.) · ${H.model.agency}`;
-  const d2 = (s) => { const t = naiveMs(s.replace(" ", "T").slice(0, 16)); return new Date(t).toLocaleDateString("th-TH", { timeZone: "UTC", day: "numeric", month: "short" }); };
-  $("hii-tiles").replaceChildren(...days.map((d) => el("div", { class: "tile" },
-    el("div", { class: "t" }, `Day ${d.day} · ${d2(d.start)}–${d2(d.end)}`),
-    el("div", { class: "v" }, d.high <= 1 ? "< 1" : `${fmt(d.low, 0)}–${fmt(d.high, 0)}`, el("small", {}, " มม.")),
-    el("div", { class: "d" }, d.high <= 1 ? "☀️ ไม่มีฝน" : d.low >= 35 ? "⛈️ ฝนหนัก" : d.low >= 10 ? "🌧️ ปานกลาง" : "🌦️ เล็กน้อย"),
-    el("div", { class: "d" }, `กริด ${d.domain_km} กม.`))));
+  const ms = (x) => naiveMs(x.replace(" ", "T").slice(0, 16));
+  const base = baseMs() ?? Date.now();
+  const left = days.filter((d) => ms(d.end) > base);                    // ช่วงที่ยังไม่จบ
+  $("hii-tiles").replaceChildren(...left.map((d) => {
+    const s0 = ms(d.start), e0 = ms(d.end);
+    return el("div", { class: "tile" },
+      el("div", { class: "t" }, `${dayWord(s0, base) === "วันนี้" ? "คืนนี้" : dMon(s0)} 19:00 →`,
+        el("span", { class: "wsub" }, `${dayWord(e0, base)} 19:00 · รอบ Day ${d.day}`)),
+      el("div", { class: "v" }, d.high <= 1 ? "< 1" : `${fmt(d.low, 0)}–${fmt(d.high, 0)}`, el("small", {}, " มม.")),
+      el("div", { class: "d" }, d.high <= 1 ? "☀️ ไม่มีฝน" : d.low >= 35 ? "⛈️ ฝนหนัก" : d.low >= 10 ? "🌧️ ปานกลาง" : "🌦️ เล็กน้อย"),
+      el("div", { class: "d" }, `กริด ${d.domain_km} กม.${s0 < base ? " · กำลังอยู่ในช่วงนี้" : ""}`));
+  }));
   $("hii-note").textContent = "สสน. เผยแพร่เป็นภาพแผนที่ (ไม่มีตัวเลข) ระบบอ่านสีที่พิกัดเป็นช่วงฝนตามแถบสีของภาพ · Day 1–3 จากโดเมนไทย 3 กม., Day 4–7 จากโดเมนอาเซียน 9 กม. · " +
-    "แต่ละช่อง = ฝนสะสม 24 ชม. 19:00–19:00 น. (12–12 UTC) ซึ่งต่างจากตาราง “ฝนแยกโมเดล” ด้านบนที่ใช้ 07:00–07:00 น.";
+    "แต่ละช่อง = ฝนสะสม 24 ชม. 19:00 → 19:00 น. (12–12 UTC) ของ สสน. ซึ่งเลื่อนจากวัน 07:00 → 07:00 น. ของตารางด้านบน 12 ชม. จึงแสดงแยก (ไม่รวมใน median)";
 }
 
 // ---------------------------------------------------------------------------
@@ -752,9 +796,10 @@ function renderHii() {
 function renderBrief() {
   const L = state.loc;
   $("brief").replaceChildren(...L.brief.map((b, i) => {
-    const title = i === 0 ? `พรุ่งนี้ · ${b.label}` : b.label;
+    const wi = winInfo(b.label);
+    const title = [wi.top, el("span", { class: "wsub" }, wi.sub)];
     return el("article", { class: "card" },
-      el("h3", {}, title),
+      el("h3", {}, ...title),
       el("div", { class: "hero" }, fmt(b.rain), el("small", {}, " มม.")),
       el("div", { class: "hero-sub" }, `🌧️ ${b.n_rain} จาก ${b.n_models} โมเดลว่าฝนตก (≥ ${L.threshold_mm} มม.)`),
       el("dl", { class: "kv" },
@@ -780,7 +825,7 @@ function renderNext() {
   $("next").replaceChildren(...tiles.map(({ w, j }) => {
     const p = ensembleMean(j);
     return el("div", { class: "tile" },
-      el("div", { class: "t" }, `ถึง ${w}`),
+      el("div", { class: "t" }, `อีก ${w}`, el("span", { class: "wsub" }, winInfo(w).sub)),
       el("div", { class: "v" }, fmt(C.median[j]), el("small", {}, " มม.")),
       el("div", { class: "d" }, `ช่วง ${fmt(C.min[j])}–${fmt(C.max[j])} มม.`),
       el("div", { class: "d" }, `โอกาสฝน (ensemble) ${p == null ? "–" : Math.round(p) + "%"}`),
@@ -810,7 +855,7 @@ function heatTable(columns, rows, { steps, digits = 1, unit = "", meta = {}, acc
       ...summary.values.map((v, j) => cell(v, summary.name, columns[j]))));
   }
   return el("table", {},
-    el("thead", {}, el("tr", {}, el("th", {}, ""), ...columns.map((c) => el("th", { scope: "col" }, c)))),
+    el("thead", {}, el("tr", {}, el("th", {}, ""), ...columns.map((c) => el("th", { scope: "col" }, ...winHead(c))))),
     el("tbody", {}, body));
 }
 
@@ -821,13 +866,13 @@ function renderRainTable() {
     steps: RAIN_STEPS, unit: "มม.", meta, accent: L.models[0]?.grid_km <= 4 ? L.models[0].name : null,
     summary: { name: "Median ทุกโมเดล", values: L.consensus.median },
   }));
-  const agree = L.windows.map((w, j) => `${w} ${L.consensus.agree_pct[j] ?? "–"}%`).join(" · ");
+  const agree = L.windows.map((w, j) => `${winInfo(w).top} ${L.consensus.agree_pct[j] ?? "–"}%`).join(" · ");
   $("rain-note").textContent = `% โมเดลที่ว่าฝนตก (≥ ${L.threshold_mm} มม.): ${agree} · ช่อง “–” คือโมเดลพยากรณ์ไปไม่ถึงช่วงนั้น`;
 }
 
 function renderEnsemble() {
   const L = state.loc;
-  $("ens-sub").textContent = `สัดส่วนสมาชิกที่ฝน ≥ ${L.threshold_mm} มม.`;
+  $("ens-sub").textContent = `ช่วงเวลาเดียวกับตารางฝน · สัดส่วนสมาชิกที่ฝน ≥ ${L.threshold_mm} มม.`;
   $("ens-table").replaceChildren(heatTable(L.windows, L.ensemble, { steps: PROB_STEPS, digits: 0, unit: "%" }));
 }
 
