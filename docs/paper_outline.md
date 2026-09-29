@@ -25,6 +25,7 @@
   - Station coordinates from GSOD; 29 stations differ > 2 km from TMD API metadata (10 by > 10 km) → forecasts re-extracted at GSOD coordinates.
 - **Climatology** GSOD 2000–2023 (⟨834,943⟩ station-days): monthly rain means, ±7-day smoothed day-of-year Tmax/Tmin.
 - **Prospective** (Sep 2026 →): TMD 3-hourly synoptic obs, ThaiWater telemetry gauges (20 inner-Bangkok gauges ≥ 2 km apart; Ayutthaya), citizen reports.
+  Includes the national HII WRF-ROMS (3 km, 12 UTC run, 12–12 UTC daily rain classes read from published maps) verified on its own 12–12 UTC window.
 
 ### 2.2 Urbanisation
 - WorldPop 2020 1-km population density, 3×3-km mean around GSOD coordinates, Degree-of-Urbanisation thresholds:
@@ -32,7 +33,10 @@
 - Robustness: Local Climate Zones map (⟨todo⟩).
 
 ### 2.3 Forecasts
-- Open-Meteo Previous Runs API (issued 1, 3, 7 days before the valid day), UTC days.
+- Open-Meteo Previous Runs API, UTC days. `previous_dayN` gives, for every valid hour, the value from the latest run issued ≥ 24N h earlier, stitched across runs.
+  We therefore label leads as **hour-matched leads of 24, 72 and 168 h** (written D+1/D+3/D+7 for brevity), not WMO Day N from a single initialisation.
+  Fixed-initialisation verification is not possible retrospectively: the Single Runs API keeps runs only from ~June 2026 and GSOD has no 2026 data.
+  The live system (Sep 2026 →) records each model's initialisation time and verifies with WMO lead time (T+ h from init; Day N = 00–00 UTC window ending 24N ± 12 h after init).
 - Models: ECMWF IFS 0.25°, ECMWF AIFS (AI, from 2025-02), NOAA GFS, DWD ICON, ECCC GEM, JMA GSM, CMA GRAPES, MF ARPEGE, UKMO UM.
 - Excluded after QC: CMA GRAPES temperature (≈ −6 °C systematic offset), NOAA GFS D+7 rainfall (anomalous dry, FBI 0.14).
 

@@ -142,6 +142,11 @@ def export_snapshot(result, export_dir, cfg=None):
             / f"{fetched_at:%Y%m%dT%H%M%S}_{result['lat']:.3f}_{result['lon']:.3f}.csv.gz")
     path.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(path, index=False, compression="gzip", encoding="utf-8")
+    # รอบรัน (เวลาเริ่มรัน UTC) ของแต่ละโมเดลในรอบนี้ ใช้นับช่วงล่วงหน้าแบบ T+ ชม.
+    runs = result.get("runs") or core.model_runs()
+    path.with_name(path.name.replace(".csv.gz", ".runs.json")).write_text(
+        json.dumps({"fetched_at_utc": pd.Timestamp.now(tz="UTC").tz_localize(None).isoformat(timespec="seconds"),
+                    "runs": runs}, ensure_ascii=False), encoding="utf-8")
     return path, int(wide.notna().sum().sum())
 
 
@@ -195,7 +200,8 @@ def collect_location(lat, lon, name, cfg=None, export_dir=None, to_db=True, full
     else:
         data, now, tz = core.fetch_deterministic(lat, lon, cfg, google_hours)
         ens = core.fetch_all_ensembles(lat, lon, cfg)
-        result = {"name": name, "lat": lat, "lon": lon, "tz": tz, "now": now, "data": data, "ensembles": ens}
+        result = {"name": name, "lat": lat, "lon": lon, "tz": tz, "now": now, "data": data, "ensembles": ens,
+                  "runs": core.model_runs()}
     out = {}
     if to_db:
         out["run_id"], out["rows"] = save_snapshot(result, cfg)

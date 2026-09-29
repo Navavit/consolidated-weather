@@ -70,14 +70,14 @@
       <div class="v-how" aria-label="วิธีเปรียบเทียบ">
         <ol class="v-steps">
           <li><span class="v-ico">🖥️</span><b>1. เก็บพยากรณ์ไว้ก่อน</b><span>ทุกชั่วโมงระบบบันทึกว่าแต่ละโมเดล “ทายไว้ว่าอะไร”</span></li>
-          <li><span class="v-ico">⏳</span><b>2. รอให้วันจริงมาถึง</b><span>พยากรณ์ที่ออก 3 ชม. – 7 วัน ก่อนเหตุการณ์</span></li>
+          <li><span class="v-ico">⏳</span><b>2. รอให้วันจริงมาถึง</b><span>ช่วงล่วงหน้านับเป็น T+ ชม. จาก “รอบรัน” ของโมเดล (มาตรฐาน WMO)</span></li>
           <li><span class="v-ico">🌧️</span><b>3. ดูค่าที่วัดได้จริง</b><span>จากสถานีอุตุฯ เครื่องวัดฝน หรือคนที่กดแจ้ง</span></li>
           <li><span class="v-ico">✅</span><b>4. ให้คะแนน</b><span>ทายถูกไหม ทายเกินหรือขาดไปเท่าไร</span></li>
         </ol>
-        <div class="v-tl" role="img" aria-label="ตัวอย่าง: พยากรณ์ที่ออกเมื่อวานสำหรับวันนี้ ถูกนำไปเทียบกับฝนที่วัดได้วันนี้">
-          <div class="tl-node"><span class="tl-dot"></span><b>ออกพยากรณ์</b><small>เมื่อวาน 07:00</small></div>
-          <div class="tl-gap"><small>ล่วงหน้า 1 วัน (D+1)</small><span class="tl-line"></span></div>
-          <div class="tl-box"><b>วันที่เทียบ: ฝนที่วัดได้จริง</b><small>07:00 → 07:00 วันถัดไป</small></div>
+        <div class="v-tl" role="img" aria-label="ตัวอย่าง: รอบรัน 00 UTC (07:00 น.) ทายฝนวันพรุ่งนี้ 07:00 ถึง 07:00 = Day 1">
+          <div class="tl-node"><span class="tl-dot"></span><b>รอบรัน (init)</b><small>00 UTC = 07:00 น.</small></div>
+          <div class="tl-gap"><small>นับ T+ ชม. จากเวลาเริ่มรัน</small><span class="tl-line"></span></div>
+          <div class="tl-box"><b>Day 1 = T+0 ถึง T+24</b><small>ฝนที่วัดได้ 07:00 → 07:00 น. (00–00 UTC)</small></div>
         </div>
       </div>
 
@@ -112,12 +112,59 @@
         </ul>
         <div id="v-points"></div>
       </details>
+
+      <details class="v-help">
+        <summary>⏱️ กรอบเวลาแบบสากล: นับ “ล่วงหน้า” อย่างไร</summary>
+        <ul>
+          <li>โมเดลไม่ได้คำนวณใหม่ทุกชั่วโมง แต่รันเป็น <b>รอบ (init / cycle)</b> ที่ 00, 06, 12, 18 UTC (= 07:00, 13:00, 19:00, 01:00 น.) บางโมเดลวันละ 2 รอบ
+            และผลออกมาหลังเริ่มรัน 3–10 ชม. ดังนั้นพยากรณ์ที่ “ดึงมาตอนนี้” อาจเป็นของรอบเมื่อหลายชั่วโมงก่อน (ดู “🕐 รอบรันของแต่ละโมเดล” ด้านล่าง)</li>
+          <li><b>ช่วงล่วงหน้า = T+ ชม.</b> นับจากเวลาเริ่มรันถึงปลายช่วงที่วัด ตามแนวทาง WMO (เดิมนับจากเวลาที่ดึง ซึ่งทำให้โมเดลที่ออกช้าเสียเปรียบ)
+            · ฝนราย 3 ชม./อุณหภูมิ จัดกลุ่มเป็น T+0–6, 6–12, 12–24, 24–48, 48–72, 72–120, 120–168, 168–240 ชม.</li>
+          <li><b>วันพยากรณ์ Day N</b> = ฝน 24 ชม. 07:00–07:00 น. (= 00–00 UTC วันอุตุนิยมวิทยาของไทยและ WMO) ที่ปลายช่วงห่างจากเวลาเริ่มรัน 24N ± 12 ชม.
+            เช่น รอบ 00 UTC → Day 1 คือ T+0–24, รอบ 12 UTC ของเมื่อวาน → Day 1 คือ T+12–36</li>
+          <li>ใช้เฉพาะรอบรันที่เริ่ม <b>ก่อนต้นช่วงที่วัด</b> และระบบได้รับไว้แล้ว — ไม่มีการใช้ข้อมูลที่รู้ผลแล้ว</li>
+          <li><b>HII WRF-ROMS</b> ออกผลเป็นฝน 19:00–19:00 น. (12–12 UTC) จึงเทียบในช่วงนั้นแยกไว้ในแหล่ง “🌊 HII” โดยทุกโมเดลใช้ช่วงและเกณฑ์ Day N เดียวกัน</li>
+          <li><b>ทั่วประเทศ</b> ใช้ Previous Runs ของ Open-Meteo: ทุกชั่วโมงใช้ค่าที่ทายไว้ล่วงหน้า ≥ 24 / 72 / 168 ชม. (อาจมาจากหลายรอบรัน) จึงเรียกว่า “ล่วงหน้า ≥ 24 ชม.” ไม่ใช่ Day N จากรอบเดียว</li>
+          <li><b>ปุ่มแจ้งฝน</b> ยังนับช่วงล่วงหน้าจากเวลาที่ดึงพยากรณ์ (จำนวนครั้งน้อย ใช้ดูแนวโน้ม)</li>
+        </ul>
+      </details>
+
+      <details class="v-help">
+        <summary>🗂️ ข้อมูลมาจากไหน ช่วงไหน เก็บอย่างไร</summary>
+        <div class="table-wrap"><table class="about-table prov">
+          <thead><tr><th>ข้อมูล</th><th>แหล่ง</th><th>ช่วงเวลา</th><th>เก็บอย่างไร</th></tr></thead>
+          <tbody>
+            <tr><td>พยากรณ์โมเดลระดับโลก + ensemble</td><td>Open-Meteo API (ECMWF, NOAA, DWD, ECCC, JMA, Météo-France, UKMO, CMA, KMA, BOM)</td>
+                <td>ตั้งแต่ <span class="prov-since">27 ก.ย. 2569</span> → ปัจจุบัน</td><td>ทุกชั่วโมง (นาทีที่ 7) ผ่าน GitHub Actions · เก็บทุกรอบที่ดึงเป็นไฟล์ csv.gz พร้อม “รอบรัน” ของแต่ละโมเดล (.runs.json) ใน branch <code>data</code></td></tr>
+            <tr><td>TMD WRF 2 กม.</td><td>กรมอุตุนิยมวิทยา NWP API</td><td>เหมือนข้างบน · ล่วงหน้า 48 ชม.</td><td>ทุกชั่วโมง · รอบรัน 00/12 UTC (ประมาณจากเวลาดึง)</td></tr>
+            <tr><td>Google Weather ~5 กม.</td><td>Google Maps Weather API</td><td>เหมือนข้างบน</td><td>ตำแหน่งแรก 10 วัน ทุกชั่วโมง · จุดตรวจ 48 ชม. ทุก 2 ชม. (ไม่เกินโควตาฟรี) · อัปเดตต่อเนื่อง ไม่มีรอบรัน</td></tr>
+            <tr><td>HII WRF-ROMS 3/9 กม.</td><td>สสน. ผ่าน ThaiWater (ภาพแผนที่ฝน 7 วัน)</td><td>ตั้งแต่ 28 ก.ย. 2569 → ปัจจุบัน</td><td>วันละ 1 รอบ (19:00 น.) · อ่านสีในภาพที่พิกัดเป็นช่วงปริมาณฝน · เก็บรอบละไฟล์</td></tr>
+            <tr><td>ฝน 3 ชม. + อุณหภูมิ (สถานีอุตุฯ)</td><td>กรมอุตุฯ Weather3Hours</td><td>ตั้งแต่เริ่มเก็บ</td><td>ทุกชั่วโมง · เก็บเฉพาะสถานีจุดตรวจ</td></tr>
+            <tr><td>ฝน 24 ชม. (เครื่องวัดโทรมาตร)</td><td>ThaiWater (สสน., กรมชลประทาน, สนน. กทม. ฯลฯ)</td><td>ตั้งแต่เริ่มเก็บ</td><td>ทุกชั่วโมง · เก็บเฉพาะจุดตรวจ (กทม. 20 จุด ห่างกัน ≥ 2 กม., อยุธยา)</td></tr>
+            <tr><td>สรุปรายวัน 07:00 น. ทุกสถานีอุตุฯ</td><td>กรมอุตุฯ WeatherToday</td><td>ตั้งแต่เริ่มเก็บ</td><td>วันละครั้ง · เทียบกับ Open-Meteo Previous Runs</td></tr>
+            <tr><td>ฝนตก/ไม่ตก จากปุ่ม</td><td>ผู้ใช้ (GitHub Issue)</td><td>ตั้งแต่เริ่มเก็บ</td><td>ทุกครั้งที่กด · พิกัด + เวลา</td></tr>
+            <tr><td>ตรวจย้อนหลังสำหรับงานวิจัย</td><td>NOAA GSOD (124 สถานี) + Open-Meteo Previous Runs · WorldPop 2020</td><td>ม.ค. 2024 – 24 ส.ค. 2025 (ค่าปกติ 2000–2023)</td><td>ดึงครั้งเดียว (<code>analysis/</code>) · ใช้พิกัดสถานีจาก GSOD</td></tr>
+          </tbody></table></div>
+      </details>
+    </section>
+
+    <section aria-labelledby="h-runs">
+      <h2 id="h-runs">🕐 รอบรันของแต่ละโมเดล <small id="runs-sub">ข้อมูลในหน้านี้มาจากรอบไหน</small></h2>
+      <div class="table-wrap" id="runs-table"></div>
+      <p class="note">รอบรัน (init) = เวลาที่โมเดลเริ่มคำนวณ · <b>ยืนยันแล้ว</b> = อ่านจาก metadata ของ Open-Meteo · <b>ประมาณ</b> = คำนวณจากตารางรอบรันและเวลาที่ผลมักออก ·
+        Google อัปเดตต่อเนื่อง ไม่มีรอบรัน</p>
     </section>
 
     <section aria-labelledby="h-rain">
       <h2 id="h-rain">ฝนแยกโมเดล (มม.) <small>เรียงจากโมเดลละเอียดสูงไปหยาบ</small></h2>
       <div class="table-wrap" id="rain-table"></div>
       <p class="note" id="rain-note"></p>
+    </section>
+
+    <section aria-labelledby="h-hii" id="hii-section" hidden>
+      <h2 id="h-hii">🌊 HII WRF-ROMS 7 วัน <small id="hii-sub">สสน. (สถาบันสารสนเทศทรัพยากรน้ำ)</small></h2>
+      <div class="tiles" id="hii-tiles"></div>
+      <p class="note" id="hii-note"></p>
     </section>
 
     <section aria-labelledby="h-ens">
@@ -175,15 +222,17 @@
         <thead><tr><th>พยากรณ์ (ที่ออกไว้ก่อน)</th><th>เทียบกับค่าวัดจริงจาก</th><th>ช่วงที่เทียบ</th><th>ล่วงหน้า</th></tr></thead>
         <tbody>
           <tr><td>ฝนและอุณหภูมิ ที่พิกัดสถานีอุตุฯ ใกล้ตำแหน่ง<br><small>ทุกโมเดล + TMD WRF + Google + ensemble</small></td>
-              <td>สถานีอุตุนิยมวิทยา (กรมอุตุนิยมวิทยา)</td><td>ฝนทุก 3 ชม., อุณหภูมิ ณ เวลาวัด</td><td>3 ชม. – 8 วัน</td></tr>
+              <td>สถานีอุตุนิยมวิทยา (กรมอุตุนิยมวิทยา)</td><td>ฝนทุก 3 ชม., อุณหภูมิ ณ เวลาวัด</td><td>T+0 – 240 ชม. จากรอบรัน</td></tr>
           <tr><td>ฝนรายวัน ที่พิกัดเครื่องวัดฝนใกล้ตำแหน่ง (≤ 10 กม.)</td>
-              <td>เครื่องวัดฝนโทรมาตร (ThaiWater: สสน., กรมชลประทาน ฯลฯ)</td><td>ฝน 24 ชม. ถึง 07.00 น.</td><td>1 – 7 วัน</td></tr>
+              <td>เครื่องวัดฝนโทรมาตร (ThaiWater: สสน., กรมชลประทาน ฯลฯ)</td><td>ฝน 24 ชม. 07:00–07:00 น. (00–00 UTC)</td><td>Day 1 – 7 (WMO)</td></tr>
+          <tr><td>ฝนรายวัน HII WRF-ROMS เทียบกับโมเดลอื่น ที่พิกัดเครื่องวัดฝน</td>
+              <td>เครื่องวัดฝนโทรมาตร (ThaiWater)</td><td>ฝน 24 ชม. 19:00–19:00 น. (12–12 UTC)</td><td>Day 1 – 7 (WMO)</td></tr>
           <tr><td>ฝน, อุณหภูมิสูงสุด/ต่ำสุด ที่สถานีอุตุฯ ทั่วประเทศ (~124 แห่ง)<br><small>โมเดลระดับโลก (พยากรณ์ย้อนหลังจาก Open-Meteo)</small></td>
-              <td>สรุปรายวัน 07.00 น. (กรมอุตุนิยมวิทยา)</td><td>24 ชม. (07 → 07 น.)</td><td>1, 3, 7 วัน</td></tr>
+              <td>สรุปรายวัน 07.00 น. (กรมอุตุนิยมวิทยา)</td><td>24 ชม. (07 → 07 น.)</td><td>≥ 24, 72, 168 ชม. (รายชั่วโมง)</td></tr>
           <tr><td>ฝน ตรงจุดที่มีคนแจ้ง</td>
-              <td>ปุ่ม 🌧️ ตก / ☀️ ไม่ตก บนหน้านี้</td><td>3 ชม. รอบเวลาที่แจ้ง</td><td>3 ชม. – 8 วัน</td></tr>
+              <td>ปุ่ม 🌧️ ตก / ☀️ ไม่ตก บนหน้านี้</td><td>3 ชม. รอบเวลาที่แจ้ง</td><td>3 ชม. – 8 วัน (นับจากเวลาดึง)</td></tr>
         </tbody></table></div>
-      <p class="note">“ฝนตก” = ≥ 0.2 มม. ใน 3 ชม. หรือ ≥ 1 มม. ต่อวัน · ช่วงเวลาล่วงหน้านับจากเวลาที่ได้รับพยากรณ์ถึงต้นช่วงที่เทียบ</p>
+      <p class="note">“ฝนตก” = ≥ 0.2 มม. ใน 3 ชม. หรือ ≥ 1 มม. ต่อวัน · ช่วงล่วงหน้านับเป็น T+ ชม. จากรอบรันของโมเดลถึงปลายช่วงที่เทียบ (WMO) · รายละเอียดดู “⏱️ กรอบเวลาแบบสากล” และ “🗂️ ข้อมูลมาจากไหน” ในส่วน 🏆</p>
 
       <h3>🧠 โมเดลที่ใช้ <small>เรียงจากละเอียดไปหยาบ</small></h3>
       <div class="table-wrap" id="about-models"></div>
@@ -214,7 +263,8 @@
       <h3>📚 แหล่งข้อมูล</h3>
       <ul class="about-list">
         <li>พยากรณ์: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0) จาก ECMWF, NOAA, DWD, ECCC, JMA, Météo-France, UK Met Office, CMA ·
-          <a href="https://data.tmd.go.th/nwpapi/" target="_blank" rel="noopener">TMD WRF</a> · <a href="https://developers.google.com/maps/documentation/weather" target="_blank" rel="noopener">Google Weather API</a></li>
+          <a href="https://data.tmd.go.th/nwpapi/" target="_blank" rel="noopener">TMD WRF</a> · <a href="https://developers.google.com/maps/documentation/weather" target="_blank" rel="noopener">Google Weather API</a> ·
+          <a href="https://www.thaiwater.net/weather/forecast" target="_blank" rel="noopener">HII WRF-ROMS (สสน.)</a></li>
         <li>ค่าวัดจริง: <a href="https://data.tmd.go.th/" target="_blank" rel="noopener">กรมอุตุนิยมวิทยา</a> · <a href="https://www.thaiwater.net/" target="_blank" rel="noopener">ThaiWater (สสน.)</a> ·
           <a href="http://air4thai.pcd.go.th/" target="_blank" rel="noopener">Air4Thai (กรมควบคุมมลพิษ)</a> · คุณภาพอากาศ <a href="https://atmosphere.copernicus.eu/" target="_blank" rel="noopener">CAMS</a> ·
           เรดาร์ <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a></li>

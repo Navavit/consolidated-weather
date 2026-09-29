@@ -87,6 +87,8 @@ def location_payload(result, cfg=None, obs=None):
         "hourly": {"time": [t.isoformat() for t in times] if times is not None else [],
                    "series": hourly, "pm25": pm25},
         "now": weather_now.for_location(result["lat"], result["lon"], obs) if obs else None,
+        "runs": result.get("runs") or {},
+        "fetched_at": now.isoformat(),
     }
 
 
@@ -150,6 +152,7 @@ def client_meta(cfg=None):
         "variables": {k: {kk: v[kk] for kk in ("api", "label", "unit", "hour", "day")} for k, v in core.VARIABLES.items()},
         "api_variables": core.API_VARIABLES,
         "hour_windows": cfg["hour_windows"], "day_leads": cfg["day_leads"],
+        "day_start_hour": int(cfg.get("day_start_hour", 0)),
         "forecast_days": core.forecast_days(cfg), "rain_threshold_mm": cfg["rain_threshold_mm"],
         "hourly_vars": HOURLY_VARS, "hourly_days": HOURLY_DAYS, "max_station_km": weather_now.MAX_STATION_KM,
     }

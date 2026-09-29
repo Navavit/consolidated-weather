@@ -258,6 +258,8 @@ function renderAll() {
   renderBrief();
   renderNext();
   renderRainTable();
+  renderHii();
+  renderRuns();
   renderEnsemble();
   renderCharts();
   renderParam();
@@ -283,7 +285,8 @@ function distKm(a, b, c, d) {
 function makeWindows(T, now, M) {
   const w = M.hour_windows.map((n) => ({ label: `+${n} ชม.`, kind: "hour",
     idx: T.flatMap((t, i) => (t > now && t <= now + n * HOUR ? [i] : [])), at: T.indexOf(now + n * HOUR) }));
-  const today = now - (now % DAY);
+  const h0 = (M.day_start_hour || 0) * HOUR;              // วันอุตุนิยมวิทยา 07:00–07:00 น. (= 00–00 UTC)
+  const today = now - ((now - h0) % DAY + DAY) % DAY;
   for (const d of M.day_leads) {
     const start = today + d * DAY, dt = new Date(start);
     const dd = String(dt.getUTCDate()).padStart(2, "0"), mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
@@ -567,17 +570,25 @@ function renderNow() {
 const V_SOURCES = [
   { key: "tmd3h", icon: "📡", title: "สถานีอุตุฯ ใกล้ตำแหน่ง", desc: "ฝนทุก 3 ชม. และอุณหภูมิ",
     vars: [["tmd3h_rain", "ฝน 3 ชม."], ["tmd3h_temp", "อุณหภูมิ"]], kind: "tmd",
-    wait: "ต้องมีพยากรณ์ที่ออกก่อนเวลาวัดอย่างน้อย 3 ชม. สถานีวัดทุก 3 ชม." },
+    wait: "ใช้เฉพาะรอบรันที่ออกก่อนต้นช่วงวัด สถานีวัดทุก 3 ชม." },
   { key: "thaiwater24h", icon: "🌧️", title: "เครื่องวัดฝนใกล้ตำแหน่ง", desc: "ฝนรายวัน (ThaiWater · สสน.)",
     vars: [["thaiwater24h_rain", "ฝนรายวัน"]], kind: "tw",
-    wait: "ใช้ฝน 24 ชม. ถึง 07 น. ที่พยากรณ์ไว้ก่อนเริ่มวัน ผลแรกมาหลังเก็บข้อมูล 2 วัน" },
+    wait: "ใช้ฝน 24 ชม. 07–07 น. (00–00 UTC) จากรอบรันที่ออกก่อนเริ่มวัน ผลแรกมาหลังเก็บข้อมูล 2 วัน" },
+  { key: "hii24h", icon: "🌊", title: "HII เทียบโมเดลอื่น", desc: "ฝน 19–19 น. ที่เครื่องวัดฝน (ช่วงเดียวกับ สสน.)",
+    vars: [["hii24h_rain", "ฝน 19–19 น."]], kind: "tw",
+    wait: "HII ออกผลวันละรอบ 19:00 น. ผลแรกหลังช่วง 24 ชม. แรกของรอบที่เก็บไว้จบลง" },
   { key: "national", icon: "🗺️", title: "สถานีอุตุฯ ทั่วประเทศ", desc: "ฝนรายวัน + อุณหภูมิสูง/ต่ำสุด ~124 สถานี",
     vars: [["national_rain", "ฝนรายวัน"], ["national_tmax", "อุณหภูมิสูงสุด"], ["national_tmin", "อุณหภูมิต่ำสุด"]],
     wait: "คำนวณวันละครั้งหลังกรมอุตุฯ สรุปผล 07.00 น." },
   { key: "user", icon: "🙋", title: "คนแจ้งผ่านปุ่ม", desc: "ตก / ไม่ตก จากปุ่มด้านบนสุด",
     vars: [["user_rain", "ตก/ไม่ตก"]], wait: "ยังไม่มีการกดปุ่ม 🌧️/☀️ ด้านบน" },
 ];
-const leadText = (l) => (l.startsWith("D+") ? `ล่วงหน้า ${l.slice(2)} วัน` : `ล่วงหน้า ${l}`);
+function leadText(l) {
+  if (l.startsWith("T+")) return `T+${l.slice(2).replace("-", "–")} ชม.`;     // นับจากรอบรัน (WMO)
+  if (l.startsWith("D+")) return `Day ${l.slice(2)}`;
+  if (/^H\d+$/.test(l)) return `ล่วงหน้า ≥ ${l.slice(1)} ชม.`;
+  return `ล่วงหน้า ${l}`;
+}
 function habit(r) {
   if (r.bias == null) return el("span", { class: "habit" }, "–");
   if (r.bias > 1.25) return el("span", { class: "habit" }, "↑ ทายฝนบ่อยเกิน");
@@ -680,8 +691,61 @@ function renderVerify() {
   const pts = (V.points || []).filter((p) => !src.kind || p.kind === src.kind);
   $("v-points").replaceChildren(...(pts.length ? [el("b", {}, "จุดตรวจที่ใช้:"),
     el("ul", {}, pts.map((p) => el("li", {}, `${p.for} → ${p.name} (ห่าง ${fmt(p.dist_km)} กม.)`)))] :
-    src.key === "national" ? [el("div", {}, "ทั่วประเทศ: สถานีอุตุฯ ~124 แห่ง (สรุป 07.00 น.) เทียบพยากรณ์ล่วงหน้า 1, 3, 7 วัน")] : []));
+    src.key === "national" ? [el("div", {}, "ทั่วประเทศ: สถานีอุตุฯ ~124 แห่ง (สรุป 07.00 น.) เทียบพยากรณ์ที่ทายไว้ล่วงหน้า ≥ 24, 72, 168 ชม. ทุกชั่วโมง (Open-Meteo Previous Runs)")] : []));
 }
+// ---------------------------------------------------------------------------
+// 🕐 รอบรันของแต่ละโมเดล (init time) ของข้อมูลที่แสดงอยู่
+// ---------------------------------------------------------------------------
+const thTime = (ms) => new Date(ms).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+function renderRuns() {
+  const L = state.loc, runs = L.runs || {};
+  const names = [...L.models.map((m) => m.name), ...Object.keys(L.ensemble || {}).map((k) => k.replace(/ \(\d+\)$/, ""))];
+  const rows = [...new Set(names)].filter((n) => runs[n]);
+  if (state.hii && L.name in (state.hii.points || {})) rows.push("HII WRF-ROMS");
+  const hiiRun = state.hii ? { init: state.hii.init_utc.replace(" ", "T"), source: "hii" } : null;
+  const SRC = { meta: "✓ ยืนยันแล้ว", estimated: "≈ ประมาณ", continuous: "ต่อเนื่อง", hii: "✓ จากภาพ สสน." };
+  const fetched = L.fetched_at ? naiveMs(L.fetched_at.slice(0, 16)) - 7 * HOUR : Date.now();                     // เวลาที่ดึง (UTC)
+  $("runs-sub").textContent = rows.length ? `ดึงเมื่อ ${thTime(fetched)} น.` : "ตำแหน่งนี้คำนวณในเบราว์เซอร์ ใช้รอบล่าสุดของ Open-Meteo";
+  $("runs-table").replaceChildren(...(rows.length ? [el("table", {},
+    el("thead", {}, el("tr", {}, ...["โมเดล", "รอบรัน (UTC)", "เวลาไทย", "อายุรอบ ณ เวลาดึง", "ที่มา"].map((h, i) =>
+      el("th", { style: i === 0 ? "text-align:left" : null }, h)))),
+    el("tbody", {}, rows.map((n) => {
+      const r = n === "HII WRF-ROMS" ? hiiRun : runs[n];
+      const t = naiveMs(r.init.slice(0, 16));
+      const age = Math.round((fetched - t) / HOUR);
+      const utc = new Date(t).toISOString().slice(5, 16).replace("T", " ").replace("-", "/");
+      return el("tr", {}, el("th", { scope: "row" }, n),
+        el("td", { class: "num" }, r.source === "continuous" ? "–" : `${utc}Z`),
+        el("td", { class: "num" }, r.source === "continuous" ? "–" : thTime(t)),
+        el("td", { class: "num" }, r.source === "continuous" ? "อัปเดตต่อเนื่อง" : `${age} ชม.`),
+        el("td", {}, SRC[r.source] || r.source));
+    })))] : []));
+}
+
+// ---------------------------------------------------------------------------
+// 🌊 HII WRF-ROMS: ช่วงฝน 7 วันที่อ่านจากภาพของ สสน. (data/hii.json)
+// ---------------------------------------------------------------------------
+function renderHii() {
+  const sec = $("hii-section");
+  if (state.hii === undefined) {
+    state.hii = null;
+    getJSON("data/hii.json").then((j) => { state.hii = j; if (state.loc) { renderHii(); renderRuns(); } }).catch(() => {});
+  }
+  const H = state.hii, days = H && state.loc && (H.points || {})[state.loc.name];
+  sec.hidden = !days;
+  if (!days) return;
+  const init = naiveMs(H.init_utc.replace(" ", "T").slice(0, 16));
+  $("hii-sub").textContent = `รอบรัน ${new Date(init).toISOString().slice(0, 16).replace("T", " ")}Z (${thTime(init)} น.) · ${H.model.agency}`;
+  const d2 = (s) => { const t = naiveMs(s.replace(" ", "T").slice(0, 16)); return new Date(t).toLocaleDateString("th-TH", { timeZone: "UTC", day: "numeric", month: "short" }); };
+  $("hii-tiles").replaceChildren(...days.map((d) => el("div", { class: "tile" },
+    el("div", { class: "t" }, `Day ${d.day} · ${d2(d.start)}–${d2(d.end)}`),
+    el("div", { class: "v" }, d.high <= 1 ? "< 1" : `${fmt(d.low, 0)}–${fmt(d.high, 0)}`, el("small", {}, " มม.")),
+    el("div", { class: "d" }, d.high <= 1 ? "☀️ ไม่มีฝน" : d.low >= 35 ? "⛈️ ฝนหนัก" : d.low >= 10 ? "🌧️ ปานกลาง" : "🌦️ เล็กน้อย"),
+    el("div", { class: "d" }, `กริด ${d.domain_km} กม.`))));
+  $("hii-note").textContent = "สสน. เผยแพร่เป็นภาพแผนที่ (ไม่มีตัวเลข) ระบบอ่านสีที่พิกัดเป็นช่วงฝนตามแถบสีของภาพ · Day 1–3 จากโดเมนไทย 3 กม., Day 4–7 จากโดเมนอาเซียน 9 กม. · " +
+    "แต่ละช่อง = ฝนสะสม 24 ชม. 19:00–19:00 น. (12–12 UTC) ซึ่งต่างจากตาราง “ฝนแยกโมเดล” ด้านบนที่ใช้ 07:00–07:00 น.";
+}
+
 // ---------------------------------------------------------------------------
 // การ์ดสรุปรายวัน
 // ---------------------------------------------------------------------------

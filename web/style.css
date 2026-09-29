@@ -250,3 +250,9 @@ td.rank { color: var(--muted); width: 1%; }
 @media (forced-colors: active) {
   .chip[aria-selected="true"] { outline: 2px solid CanvasText; }
 }
+
+[hidden] { display: none !important; }
+.prov td:first-child { font-weight: 600; }
+.prov td { font-size: 13px; vertical-align: top; }
+#hii-tiles { grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); }
+#hii-tiles .v { font-size: 22px; }

@@ -23,6 +23,7 @@ PREVIOUS_RUNS_URL = "https://previous-runs-api.open-meteo.com/v1/forecast"
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 TMD_HOURLY_URL = "https://data.tmd.go.th/nwpapi/v1/forecast/location/hourly/at"
 GOOGLE_HOURLY_URL = "https://weather.googleapis.com/v1/forecast/hours:lookup"
+RUN_META_URL = "https://api.open-meteo.com/data/{}/static/meta.json"
 
 # ลองใหม่อัตโนมัติเมื่อ timeout / 429 / 5xx (Open-Meteo ensemble ช้าช่วงต้นชั่วโมง) รอ 0, 10, 20 วินาที
 SESSION = requests.Session()
@@ -43,6 +44,7 @@ DEFAULT_CONFIG = {
     "verify_window_hours": 3,              # ช่วงเวลารอบเวลาที่สังเกตที่ใช้ตัดสินว่าโมเดล "ทายว่าฝนตก"
     "verify_threshold_mm": 0.2,            # ฝนรวมในช่วงนั้น >= ค่านี้ = โมเดลทายว่าฝนตก
     "db_path": "data/weather.db",
+    "day_start_hour": 7,                   # วันอุตุนิยมวิทยา: 07:00–07:00 เวลาไทย = 00–00 UTC (มาตรฐาน WMO/กรมอุตุฯ)
     "site_order": [],
     "dense_gauges": {},                    # เช่น {"กรุงเทพมหานคร": {"n": 20, "radius_km": 15, "min_spacing_km": 2}} จุดตรวจฝนหนาแน่นในเมือง                      # ลำดับแท็บบนหน้าเว็บ (ชื่อตำแหน่ง) ว่าง = ตำแหน่งของฉันก่อน แล้วตามลำดับ target_places
     "max_grid_km": None,                   # ตัดโมเดลที่กริดหยาบกว่านี้ออก เช่น 20 (None = ใช้ทุกโมเดล)
@@ -126,6 +128,56 @@ VARIABLES = {
     "uv":        {"api": "uv_index",                  "label": "ดัชนี UV (สูงสุด)",        "unit": "",        "hour": "at",  "day": "max",  "cmap": "YlOrBr"},
 }
 API_VARIABLES = sorted({v["api"] for v in VARIABLES.values()})
+
+
+# ---------------------------------------------------------------------------
+# รอบรัน (initialisation time) ของแต่ละโมเดล — ใช้นับช่วงล่วงหน้าแบบสากล (T+ ชม. นับจากเวลาเริ่มรัน)
+# ---------------------------------------------------------------------------
+RUN_META = {   # ชื่อโมเดลในแอป → ชื่อชุดข้อมูล metadata ของ Open-Meteo (None = ไม่มี/ไม่อัปเดต)
+    "ECMWF IFS": "ecmwf_ifs", "ECMWF AIFS": "ecmwf_aifs025_single", "NOAA GFS": "ncep_gfs013",
+    "NOAA AIGFS": "ncep_aigfs025", "DWD ICON": "dwd_icon", "JMA GSM": "jma_gsm", "MF ARPEGE": "meteofrance_arpege_world025",
+    "UKMO UM": "ukmo_global_deterministic_10km", "CMA GRAPES": "cma_grapes_global", "KMA GDPS": "kma_gdps",
+    "BOM ACCESS-G": "bom_access_global", "ECCC GEM": None,
+    "ECMWF ENS": "ecmwf_ifs025_ensemble", "ECMWF AIFS ENS": "ecmwf_aifs025_single", "NOAA GEFS": "ncep_gefs025",
+    "NOAA AIGEFS": "ncep_aigfs025", "DWD ICON-EPS": "dwd_icon_eps", "UKMO MOGREPS-G": None, "ECCC GEPS": None,
+}
+RUN_CYCLE = {  # โมเดลที่ไม่มี metadata: รอบรันทุกกี่ชม. และความล่าช้าโดยประมาณ (ชม.) ใช้ประมาณรอบรัน
+    "ECCC GEM": (12, 6), "ECCC GEPS": (12, 7), "UKMO MOGREPS-G": (6, 7), "TMD WRF": (12, 6),
+}
+_RUN_CACHE = {"at": None, "data": {}}
+
+
+def _estimate_init(fetched_utc, cycle, latency):
+    t = fetched_utc - pd.Timedelta(hours=latency)
+    return t.floor(f"{cycle}h")
+
+
+def model_runs(fetched_utc=None):
+    """รอบรันของทุกโมเดล ณ เวลาดึง: {ชื่อ: {"init": ISO UTC, "source": meta|estimated|continuous}}"""
+    now = pd.Timestamp.now(tz="UTC").tz_localize(None) if fetched_utc is None else pd.Timestamp(fetched_utc)
+    if _RUN_CACHE["at"] is None or abs((now - _RUN_CACHE["at"]).total_seconds()) > 600:
+        data = {}
+        for name, ds in RUN_META.items():
+            if not ds:
+                continue
+            try:
+                j = SESSION.get(RUN_META_URL.format(ds), timeout=20).json()
+                t = j.get("last_run_initialisation_time")
+                if t:
+                    data[name] = pd.Timestamp(t, unit="s")
+            except Exception:
+                pass
+        _RUN_CACHE.update(at=now, data=data)
+    out = {}
+    for name in list(RUN_META) + list(RUN_CYCLE) + [GOOGLE_MODEL["name"], TMD_MODEL["name"]]:
+        init = _RUN_CACHE["data"].get(name)
+        if init is not None and now - init < pd.Timedelta(hours=36):            # metadata ที่ค้างเก่า = ใช้ไม่ได้
+            out[name] = {"init": init.isoformat(), "source": "meta"}
+        elif name in RUN_CYCLE:
+            out[name] = {"init": _estimate_init(now, *RUN_CYCLE[name]).isoformat(), "source": "estimated"}
+        elif name == GOOGLE_MODEL["name"]:
+            out[name] = {"init": now.floor("h").isoformat(), "source": "continuous"}
+    return out
 
 
 def active_models(cfg=None):
@@ -498,7 +550,9 @@ def window_masks(index, now, cfg=None, kinds=("hour", "day")):
             end = now + pd.Timedelta(hours=n)
             masks[f"+{n} ชม."] = ("hour", (index > now) & (index <= end), end)
     if "day" in kinds:
-        today = now.normalize()
+        # วันอุตุนิยมวิทยา (ค่าเริ่มต้น 07:00–07:00 เวลาไทย = 00–00 UTC) ให้ตรงกับค่าวัดของกรมอุตุฯ/GSOD และแนวทาง WMO
+        h0 = pd.Timedelta(hours=int(cfg.get("day_start_hour", 0)))
+        today = (now - h0).normalize() + h0
         for d in cfg["day_leads"]:
             start = today + pd.Timedelta(days=d)
             masks[f"D+{d} ({start:%d/%m})"] = ("day", (index > start) & (index <= start + pd.Timedelta(days=1)), None)
@@ -650,6 +704,7 @@ def analyze_location(lat, lon, name, cfg=None, google_hours=None):
         "ensemble": ensemble_probability(ensembles, now, cfg),
         "brief": daily_brief(tables, aq, now, cfg),
         "google_calls": google_calls,
+        "runs": model_runs(),
     }
 
 
