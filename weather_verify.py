@@ -31,6 +31,7 @@ LOOKBACK_DAYS = 9                     # พยากรณ์ย้อนหล�
 GAUGE_MAX_KM = 10
 NATIONAL_LEADS = [1, 3, 7]
 PAIR_KEYS = ["source", "point", "obs_time", "variable", "model", "kind", "lead", "init"]
+BAD_SOURCES = {"det_mm", "det_t", "ens_prob"}      # คู่ที่ติดชื่อผิดจากบั๊กรุ่น ef5156b (ลบทิ้งเมื่อโหลด/บันทึก)
 SCHEME = "std1"                       # ช่วงล่วงหน้าแบบสากล (นับจากเวลาเริ่มรัน) — คู่แบบเก่า (นับจากเวลาดึง) ไม่ใช้จัดอันดับ
 # ช่วงล่วงหน้าแบบ WMO: T+ ชม. จากเวลาเริ่มรัน (init) ถึงปลายช่วงที่วัด
 STD_LEADS = [(0, 6), (6, 12), (12, 24), (24, 48), (48, 72), (72, 120), (120, 168), (168, 240)]
@@ -264,22 +265,22 @@ def _pairs_3h(archive, points, obs, kind, source, cfg=None, ens=True):
             rain, temp = ob.get("rain_3h"), ob.get("temp")
             for fetched, wide, init_of in runs:
                 for col in wide.columns:
-                    source, model = col.split("|", 1)
+                    field, model = col.split("|", 1)
                     init = init_of(model)
                     lead = _hour_lead((T - init).total_seconds() / 3600)
                     if not lead or init > start:
                         continue
-                    if source == "det_mm" and pd.notna(rain) and fetched <= start:
+                    if field == "det_mm" and pd.notna(rain) and fetched <= start:
                         fc = _window(wide, col, hours)
                         if fc is not None:
                             recs.append(_rec(source, p["name"], T, "rain", model, "det", init, fc, float(rain), lead, thr))
-                    elif source == "ens_prob" and ens_ok and pd.notna(rain) and fetched <= start:
+                    elif field == "ens_prob" and ens_ok and pd.notna(rain) and fetched <= start:
                         c = T - pd.Timedelta(hours=1)
                         if c in wide.index and pd.notna(wide.at[c, col]):
                             prob = float(wide.at[c, col])
                             recs.append(_rec(source, p["name"], T, "rain", model, "ens", init, prob, float(rain), lead,
                                              thr, ev_fc=prob >= 50))
-                    elif source == "det_t" and pd.notna(temp) and fetched < T and T in wide.index:
+                    elif field == "det_t" and pd.notna(temp) and fetched < T and T in wide.index:
                         v = wide.at[T, col]
                         if pd.notna(v):
                             recs.append(_rec(source, p["name"], T, "temp", model, "det", init, float(v), float(temp), lead))
@@ -497,6 +498,7 @@ def save_pairs(archive, recs):
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists():
             g = pd.concat([pd.read_csv(path), g], ignore_index=True)
+            g = g[~g["source"].isin(BAD_SOURCES)]
         g = g.drop_duplicates(PAIR_KEYS, keep="last").sort_values(PAIR_KEYS)
         g.to_csv(path, index=False, compression="gzip")
     return len(df)
@@ -507,6 +509,7 @@ def load_pairs(archive, days=None):
     if not files:
         return pd.DataFrame()
     df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+    df = df[~df["source"].isin(BAD_SOURCES)].copy()
     df["obs_time"] = pd.to_datetime(df["obs_time"])
     for col in ("scheme", "init"):
         if col not in df:
