@@ -34,7 +34,8 @@ PAIR_KEYS = ["source", "point", "obs_time", "variable", "model", "kind", "lead",
 BAD_SOURCES = {"det_mm", "det_t", "ens_prob"}      # คู่ที่ติดชื่อผิดจากบั๊กรุ่น ef5156b (ลบทิ้งเมื่อโหลด/บันทึก)
 SCHEME = "std1"                       # ช่วงล่วงหน้าแบบสากล (นับจากเวลาเริ่มรัน) — คู่แบบเก่า (นับจากเวลาดึง) ไม่ใช้จัดอันดับ
 # ช่วงล่วงหน้าแบบ WMO: T+ ชม. จากเวลาเริ่มรัน (init) ถึงปลายช่วงที่วัด
-STD_LEADS = [(0, 6), (6, 12), (12, 24), (24, 48), (48, 72), (72, 120), (120, 168), (168, 240)]
+# T+0–6 รวมกับ 6–12: โมเดลส่งผลช้ากว่ารอบรัน 4–16 ชม. ช่วง 3 ชม. จึงไปถึง T+0–6 ไม่ได้ (มีแต่ Google ที่อัปเดตต่อเนื่อง)
+STD_LEADS = [(0, 12), (12, 24), (24, 48), (48, 72), (72, 120), (120, 168), (168, 240)]
 HOUR_LEADS = [(lo, hi, f"T+{lo}-{hi}") for lo, hi in STD_LEADS]
 TZ_OFFSET = pd.Timedelta(hours=7)     # เวลาไทย = UTC+7 (ไฟล์พยากรณ์/ค่าวัดเก็บเป็นเวลาไทย)
 SECTIONS = {
@@ -519,6 +520,7 @@ def load_pairs(archive, days=None):
     nat = df["source"].isin(["national", "national3h"]) & df["lead"].astype(str).str.startswith("D+")
     df.loc[nat, "lead"] = "H" + (df.loc[nat, "lead"].str[2:].astype(int) * 24).astype(str)
     df.loc[df["source"].isin(["national", "national3h"]), "scheme"] = SCHEME
+    df.loc[df["lead"].isin(["T+0-6", "T+6-12"]), "lead"] = "T+0-12"          # ช่วงเดิมก่อนรวม
     df = df.drop_duplicates(PAIR_KEYS, keep="last")
     if days:
         df = df[df["obs_time"] >= pd.Timestamp.now() - pd.Timedelta(days=days)]
@@ -588,8 +590,9 @@ def leaderboard(archive, days=30, cfg=None):
                         rows.sort(key=lambda r: r.get("brier", 9) if kind == "ens" else (-(r["csi"] or 0), -(r["acc"] or 0)))
                     else:
                         rows.sort(key=lambda r: r["mae"])
-                    if rows:
+                    if len(rows) >= 2:                               # โมเดลเดียวเทียบกับใครไม่ได้
                         sec[key][lead] = rows
+            sec["leads"] = [l for l in sec["leads"] if l in sec["tables"] or l in sec["ens_tables"]]
         out["sections"].append(sec)
     return out
 

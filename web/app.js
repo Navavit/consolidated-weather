@@ -668,11 +668,15 @@ function renderVerify() {
     el("button", { class: "chip", role: "tab", type: "button", "aria-selected": String(id === secId),
       onclick: () => { state.vSection = id; state.vLead = null; renderVerify(); } }, lab)) : []));
   const pick = byId[secId] || { leads: [], tables: {}, n_obs: 0 };
-  const lead = pick.leads.includes(state.vLead) ? state.vLead : pick.leads[0];
+  // ค่าเริ่มต้น: ช่วงที่มีโมเดลให้เทียบมากที่สุด (เท่ากันใช้ที่มีจำนวนครั้งมากกว่า)
+  const score = (l) => { const t = (pick.tables || {})[l] || []; return t.length * 1e6 + t.reduce((a, r) => a + (r.n || 0), 0); };
+  const best = [...pick.leads].sort((a, b) => score(b) - score(a))[0];
+  const lead = pick.leads.includes(state.vLead) ? state.vLead : best;
   state.vLead = lead;
   $("v-leads").replaceChildren(...pick.leads.map((l) =>
     el("button", { class: "chip", role: "tab", type: "button", "aria-selected": String(l === lead),
-      onclick: () => { state.vLead = l; renderVerify(); } }, leadText(l))));
+      onclick: () => { state.vLead = l; renderVerify(); } }, leadText(l),
+      el("span", { class: "chip-n" }, ` · ${((pick.tables || {})[l] || []).length} โมเดล`))));
   $("v-sub").textContent = `${V.days} วันล่าสุด · เริ่มเก็บ ${V.since || "วันนี้"} · อัปเดต ${timeAgo(V.updated)}`;
 
   const rows = (pick.tables || {})[lead] || [];
