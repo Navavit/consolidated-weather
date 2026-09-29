@@ -113,6 +113,23 @@ def verification_points(archive, locations, tmd3h, thaiwater, cfg=None):
     pts = {p["key"]: p for p in (json.loads(path.read_text(encoding="utf-8")) if path.exists() else [])
            if p.get("for") in current}
     per_loc = int(cfg.get("gauges_per_location", 1))
+    # เครื่องวัดที่หยุดส่งข้อมูล (เช่น ทั้งเครือข่ายของหน่วยงานหนึ่งหายจาก ThaiWater) ถูกแทนด้วยเครื่องที่ยังรายงานอยู่
+    # เก็บเครื่องเดิมไว้ 7 วันเผื่อกลับมา (ประวัติคะแนนยังอยู่ใน pairs)
+    now = pd.Timestamp.now(tz="Asia/Bangkok").tz_localize(None)
+    live = {str(g["id"]) for g in thaiwater}
+    seen = load_obs(archive, "thaiwater")
+    seen = seen.groupby("id")["time"].max().to_dict() if len(seen) else {}
+    for p in pts.values():
+        if p["kind"] != "tw":
+            continue
+        if str(p["id"]) in live:
+            p["last_seen"] = now.isoformat(timespec="minutes")
+        if "last_seen" not in p:                             # จุดเดิมก่อนมีฟิลด์นี้: ใช้เวลารายงานล่าสุดในคลัง
+            t = seen.get(str(p["id"]))
+            p["last_seen"] = (t if t is not None else now).isoformat(timespec="minutes")
+        p["active"] = not live or now - pd.Timestamp(p["last_seen"]) <= pd.Timedelta(hours=24)
+    pts = {k: p for k, p in pts.items() if p["kind"] != "tw" or p["active"]
+           or now - pd.Timestamp(p["last_seen"]) <= pd.Timedelta(days=7)}
     for lat, lon, name in locations:
         s = weather_now.nearest(lat, lon, tmd3h)
         if s and f"tmd:{s['id']}" not in pts:
@@ -123,7 +140,7 @@ def verification_points(archive, locations, tmd3h, thaiwater, cfg=None):
         n_want = int(dense["n"]) if dense else per_loc
         radius = float(dense.get("radius_km", GAUGE_MAX_KM)) if dense else GAUGE_MAX_KM
         spacing = float(dense.get("min_spacing_km", 2.0)) if dense else 0.0
-        chosen = [p for p in pts.values() if p["kind"] == "tw" and p.get("for") == name]
+        chosen = [p for p in pts.values() if p["kind"] == "tw" and p.get("for") == name and p.get("active", True)]
         near = []
         for g in sorted((g for g in thaiwater if weather_now.distance_km(lat, lon, g["lat"], g["lon"]) <= radius),
                         key=lambda g: weather_now.distance_km(lat, lon, g["lat"], g["lon"])):
@@ -139,7 +156,9 @@ def verification_points(archive, locations, tmd3h, thaiwater, cfg=None):
             if key not in pts:
                 pts[key] = {"key": key, "kind": "tw", "id": g["id"], "name": f"โทรมาตร{g['name']} ({g['area']})",
                             "lat": g["lat"], "lon": g["lon"], "for": name,
-                            "dist_km": round(weather_now.distance_km(lat, lon, g["lat"], g["lon"]), 1)}
+                            "dist_km": round(weather_now.distance_km(lat, lon, g["lat"], g["lon"]), 1),
+                            "agency": g.get("agency"), "active": True,
+                            "last_seen": now.isoformat(timespec="minutes")}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(list(pts.values()), ensure_ascii=False, indent=1), encoding="utf-8")
     return list(pts.values())
@@ -643,7 +662,7 @@ def update(archive, locations, cfg=None, site_dir=None):
     points = verification_points(archive, locations, obs["tmd3h"], obs["thaiwater"], cfg)
     # เก็บเท่าที่โครงการใช้: ราย 3 ชม. และสรุป 07 น. ทุกสถานีอุตุฯ (ส่วนทั่วประเทศ), โทรมาตรเฉพาะจุดตรวจ
     # ประวัติย้อนหลังของสถานีอุตุฯ ทั้งประเทศ ดึงเพิ่มได้จาก NOAA GSOD เมื่อต้องการ (docs/MODELS.md)
-    tw_ids = {str(p["id"]) for p in points if p["kind"] == "tw"}
+    tw_ids = {str(p["id"]) for p in points if p["kind"] == "tw" and p.get("active", True)}
     archive_obs(archive, obs["tmd3h"], "tmd3h")                              # ทุกสถานี (ใช้กับส่วนทั่วประเทศราย 3 ชม.)
     archive_obs(archive, obs["tmdday"], "tmdday")
     archive_obs(archive, [g for g in obs["thaiwater"] if str(g["id"]) in tw_ids], "thaiwater")
@@ -655,10 +674,11 @@ def update(archive, locations, cfg=None, site_dir=None):
         except Exception as e:
             print(f"⚠️ ฝนรายชั่วโมง {sid}: {e}")
     archive_obs(archive, hourly, "tw1h")
-    log = collect_points(points, archive, cfg, google_for=locations[0][2] if locations else None)
+    active = [p for p in points if p.get("active", True)]
+    log = collect_points(active, archive, cfg, google_for=locations[0][2] if locations else None)
     print(log.to_string(index=False))
     # HII WRF-ROMS: ภาพออกวันละรอบ (19:00 น.) อ่านค่าครั้งเดียวต่อรอบ ที่ตำแหน่งของผู้ใช้และเครื่องวัดฝน
-    hii_pts = [tuple(l) for l in locations] + [(p["lat"], p["lon"], p["name"]) for p in points if p["kind"] == "tw"]
+    hii_pts = [tuple(l) for l in locations] + [(p["lat"], p["lon"], p["name"]) for p in points if p["kind"] == "tw" and p.get("active", True)]
     try:
         hii_init, hii_df = hii.archive(archive, hii_pts)
         print(f"HII WRF-ROMS รอบ {hii_init}: {len(hii_df)} ค่า")
@@ -672,8 +692,17 @@ def update(archive, locations, cfg=None, site_dir=None):
         except Exception as e:
             print(f"⚠️ {fn.__name__}: {e}")
     print(f"คู่ (พยากรณ์, ค่าวัด) ใหม่/อัปเดต: {n}")
+    import weather_usermode as usermode                     # ความแม่นแบบมุมผู้ใช้ (ช่วงเดียวกับหน้าเว็บ)
+    try:
+        print(f"มุมผู้ใช้: {usermode.update(archive, points, cfg)} แถว")
+    except Exception as e:
+        print(f"⚠️ มุมผู้ใช้: {e}")
     if site_dir:
         lb = leaderboard(archive, days=int(cfg.get("leaderboard_days", 30)), cfg=cfg)
+        try:
+            lb["user_mode"] = usermode.summary(archive, days=int(cfg.get("leaderboard_days", 30)))
+        except Exception as e:
+            print(f"⚠️ สรุปมุมผู้ใช้: {e}")
         (Path(site_dir) / "data").mkdir(parents=True, exist_ok=True)
         (Path(site_dir) / "data" / "verification.json").write_text(
             json.dumps(_clean(lb), ensure_ascii=False, allow_nan=False), encoding="utf-8")

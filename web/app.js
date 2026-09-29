@@ -138,7 +138,8 @@ async function init() {
   const wantAbout = location.hash === "#about";     // อ่านก่อน เพราะการเลือกตำแหน่งจะล้าง hash
   initRainBar();
   getJSON("data/verification.json").then((v) => {
-    state.verify = v; renderVerify();
+    state.verify = v; renderVerify(); renderUserMode();
+    if (state.loc) { renderNext(); renderBrief(); }
     if (document.body.classList.contains("about-mode")) showAbout(true);
   }).catch(() => {
     $("v-note").textContent = "ยังไม่มีข้อมูล — ระบบเริ่มเก็บค่าวัดจากสถานีแล้ว ผลจะเริ่มแสดงในไม่กี่ชั่วโมง";
@@ -640,6 +641,92 @@ function tempHabit(r) {
   return `${r.bias > 0 ? "↑ ทายสูงไป" : "↓ ทายต่ำไป"} ${fmt(Math.abs(r.bias))} °C`;
 }
 
+// ---------------------------------------------------------------------------
+// 👤 มุมผู้ใช้: ถ้าเว็บบอกว่าฝนจะตก เชื่อได้แค่ไหน (verification.json → user_mode)
+// ---------------------------------------------------------------------------
+const U_WIN_TEXT = { "+3": "อีก 3 ชม.", "+6": "อีก 6 ชม.", "+12": "อีก 12 ชม.", "+24": "อีก 24 ชม.", "D+1": "พรุ่งนี้", "D+3": "อีก 3 วัน", "D+7": "อีก 7 วัน" };
+const winKey = (w) => (/^\+(\d+)/.exec(w) ? `+${/^\+(\d+)/.exec(w)[1]}` : /^D\+(\d+)/.exec(w) ? `D+${/^D\+(\d+)/.exec(w)[1]}` : w);
+function userScope() {
+  const U = state.verify?.user_mode;
+  if (!U) return null;
+  const name = state.loc?.name;
+  return { name: name && U.scopes[name] ? name : "ทุกตำแหน่ง", data: U.scopes[name] || U.scopes["ทุกตำแหน่ง"] || {} };
+}
+function medianRow(w) {
+  const U = state.verify?.user_mode, sc = userScope();
+  return U && sc ? ((sc.data[w] || {}).rows || []).find((r) => r.model === U.median) : null;
+}
+/** ป้ายสั้น ๆ ใต้การ์ดพยากรณ์: ที่ผ่านมาค่ากลางทุกโมเดลของช่วงนี้แม่นแค่ไหน */
+function trustBadge(w) {
+  const r = medianRow(winKey(w));
+  if (!state.verify?.user_mode) return null;
+  if (!r || r.n < 10 || r.n_rain < 3)
+    return el("div", { class: "trust wait", title: "ต้องมีข้อมูลอย่างน้อย 10 ครั้ง และฝนตกจริงอย่างน้อย 3 ครั้ง" }, `📊 กำลังสะสมข้อมูล (${r ? r.n : 0} ครั้ง)`);
+  return el("div", { class: "trust", title: `ค่ากลางทุกโมเดล · ${r.n} ครั้ง · ${state.verify.user_mode.days} วันล่าสุด` },
+    `📊 ที่ผ่านมา: บอกว่าตก → ตกจริง ${fmt(r.sr10 ?? 0, 0)}/10 · ฝนตก → เตือนไว้ ${fmt(r.pod10 ?? 0, 0)}/10`);
+}
+function renderUserMode() {
+  const V = state.verify, U = V?.user_mode;
+  const mode = store.get("v-mode") || "user";
+  $("vm-user").setAttribute("aria-selected", String(mode === "user"));
+  $("vm-wmo").setAttribute("aria-selected", String(mode === "wmo"));
+  $("vm-user").onclick = () => { store.set("v-mode", "user"); renderUserMode(); };
+  $("vm-wmo").onclick = () => { store.set("v-mode", "wmo"); renderUserMode(); };
+  $("v-user").hidden = mode !== "user";
+  $("v-wmo").hidden = mode !== "wmo";
+  if (mode !== "user") return;
+  const sc = userScope();
+  if (!U || !sc) {
+    $("u-summary").replaceChildren(el("p", {}, "⏳ กำลังสะสมข้อมูล — ระบบเริ่มเก็บแบบมุมผู้ใช้แล้ว"));
+    return;
+  }
+  const wins = U.windows.filter((w) => sc.data[w]);
+  const w = wins.includes(state.uWin) ? state.uWin : (wins.includes("+3") ? "+3" : wins[0]);
+  state.uWin = w;
+  $("u-wins").replaceChildren(...wins.map((x) => el("button", { class: "chip", role: "tab", type: "button",
+    "aria-selected": String(x === w), onclick: () => { state.uWin = x; renderUserMode(); } }, U_WIN_TEXT[x] || x)));
+  const rows = ((sc.data[w] || {}).rows || []).filter((r) => r.n >= 3);
+  const med = rows.find((r) => r.model === U.median);
+  const models = rows.filter((r) => r.model !== U.median && r.model !== U.ens && r.n_rain >= 3);
+  const best = [...models].sort((a, b) => (b.csi ?? 0) - (a.csi ?? 0))[0];
+  const scopeTxt = sc.name === "ทุกตำแหน่ง" ? "ทุกจุดตรวจ" : `จุดตรวจของ${sc.name}`;
+  $("u-summary").replaceChildren(el("p", {}, ...(med ? [
+    el("b", {}, U_WIN_TEXT[w]), `: ถ้าเว็บนี้ (ค่ากลางทุกโมเดล) บอกว่าฝนตก → `, el("b", {}, `ตกจริง ${fmt(med.sr10 ?? 0, 0)} ใน 10 ครั้ง`),
+    ` · ถ้าฝนตกจริง → `, el("b", {}, `เตือนไว้ก่อน ${fmt(med.pod10 ?? 0, 0)} ใน 10 ครั้ง`),
+    ` (${med.n.toLocaleString("th-TH")} ครั้ง, ฝนตกจริง ${med.n_rain} ครั้ง, ${scopeTxt})`,
+    best ? [` · แหล่งที่ทายฝนเก่งสุดช่วงนี้: `, el("b", {}, best.model)] : "",
+    med.n < 30 ? " · ข้อมูลยังน้อย ผลอาจเปลี่ยน" : ""].flat() : ["⏳ ยังไม่มีข้อมูลพอสำหรับช่วงนี้"])));
+  const bar = (x) => el("td", { class: "barcell" }, el("span", { class: "meter wide", "aria-hidden": "true" },
+    el("i", { style: `width:${Math.max(3, (x ?? 0) * 10)}%` })), " ", el("b", {}, x == null ? "–" : `${fmt(x, 0)}/10`));
+  const order = [med, rows.find((r) => r.model === U.ens), ...rows.filter((r) => r.model !== U.median && r.model !== U.ens)].filter(Boolean);
+  $("u-table").replaceChildren(el("table", { class: "v-simple" },
+    el("thead", {}, el("tr", {}, ...["แหล่ง", "บอกว่าตก → ตกจริง", "ฝนตก → เตือนไว้", "ทายถูก", `ฝนหนัก (≥ ${U.heavy_mm[w]} มม.) เตือนได้`, "ครั้ง"]
+      .map((h, i) => el("th", { style: i === 0 ? "text-align:left" : null }, h)))),
+    el("tbody", {}, order.map((r) => el("tr", { class: r.model === U.median ? "accent" : null },
+      el("th", { scope: "row" }, r.model, r.model === U.median ? el("span", { class: "km" }, "ตัวที่หน้าเว็บแสดง") : null),
+      bar(r.sr10), bar(r.pod10), el("td", { class: "num" }, r.acc == null ? "–" : `${fmt(r.acc, 0)}%`),
+      el("td", { class: "num" }, r.heavy_n ? `${Math.round((r.heavy_pod10 ?? 0) * r.heavy_n / 10)}/${r.heavy_n}` : "ยังไม่มีฝนหนัก"),
+      el("td", { class: "num" }, r.n.toLocaleString("th-TH")))))));
+  // ช่วงของวัน (ค่ากลางทุกโมเดล)
+  const tod = (sc.data[w] || {}).tod || {};
+  const TODS = [["เช้า", "07–13 น."], ["บ่าย", "13–19 น."], ["ค่ำ", "19–01 น."], ["ดึก", "01–07 น."]].filter(([t]) => tod[t]);
+  $("u-tod").replaceChildren(...(TODS.length ? [el("h4", {}, `ช่วงของวัน (เริ่มช่วง${U_WIN_TEXT[w]})`),
+    el("table", { class: "v-simple" }, el("thead", {}, el("tr", {}, ...["ช่วง", "บอกตก → ตกจริง", "ฝนตก → เตือนไว้", "ครั้ง"].map((h) => el("th", {}, h)))),
+      el("tbody", {}, TODS.map(([t, hh]) => el("tr", {}, el("th", { scope: "row" }, `${t} `, el("span", { class: "km" }, hh)),
+        el("td", { class: "num" }, tod[t].sr10 == null ? "–" : `${fmt(tod[t].sr10, 0)}/10`),
+        el("td", { class: "num" }, tod[t].pod10 == null ? "–" : `${fmt(tod[t].pod10, 0)}/10`),
+        el("td", { class: "num" }, tod[t].n)))))] : []));
+  // โอกาสฝน % เชื่อได้ไหม
+  const rel = (sc.data._reliability || []).filter((b) => b.n);
+  $("u-rel").replaceChildren(...(w === "+3" && rel.length ? [el("h4", {}, "“โอกาสฝน %” เชื่อได้ไหม (อีก 3 ชม.)"),
+    el("table", { class: "v-simple" }, el("thead", {}, el("tr", {}, ...["เว็บบอก", "ฝนตกจริง", "ครั้ง"].map((h) => el("th", {}, h)))),
+      el("tbody", {}, rel.map((b) => el("tr", {}, el("th", { scope: "row" }, `${b.lo}–${b.hi}%`),
+        el("td", { class: "num" }, b.freq == null ? "–" : `${b.freq}%`), el("td", { class: "num" }, b.n))))),
+    el("p", { class: "note" }, "ถ้าเชื่อได้ ตัวเลขสองคอลัมน์ควรใกล้กัน เช่น บอก 60–80% → ฝนตกจริงราว 70%")] : []));
+  $("u-note").textContent = `${U.days} วันล่าสุด (เริ่ม ${U.since || "–"}) · ค่าวัด: เครื่องวัดฝนโทรมาตรรายชั่วโมง + สถานีอุตุฯ ราย 3 ชม. ที่จุดตรวจ · ` +
+    `Google Weather มีเฉพาะจุดตรวจของตำแหน่งแรกและล่วงหน้า 48 ชม. · ฝนหนัก: +3/+6 ชม. ≥ 10, +12/+24 ชม. ≥ 20, รายวัน ≥ 35 มม.`;
+}
+
 function renderVerify() {
   const V = state.verify;
   if (!V) return;
@@ -807,6 +894,7 @@ function renderBrief() {
       el("h3", {}, ...title),
       el("div", { class: "hero" }, fmt(b.rain), el("small", {}, " มม.")),
       el("div", { class: "hero-sub" }, `🌧️ ${b.n_rain} จาก ${b.n_models} โมเดลว่าฝนตก (≥ ${L.threshold_mm} มม.)`),
+      trustBadge(b.label),
       el("dl", { class: "kv" },
         el("dt", {}, "🌡️ อุณหภูมิ"), el("dd", {}, `${fmt(b.tmin, 0)}–${fmt(b.tmax, 0)} °C`),
         el("dt", {}, "🥵 รู้สึกเหมือน"), el("dd", {}, `${fmt(b.feels, 0)} °C`, statusPill(b.heat)),
@@ -835,7 +923,7 @@ function renderNext() {
       el("div", { class: "d" }, `ช่วง ${fmt(C.min[j])}–${fmt(C.max[j])} มม.`),
       el("div", { class: "d" }, `โอกาสฝน (ensemble) ${p == null ? "–" : Math.round(p) + "%"}`),
       el("div", { class: "bar", role: "img", "aria-label": `โอกาสฝน ${p == null ? "ไม่มีข้อมูล" : Math.round(p) + "%"}` },
-        el("i", { style: `width:${p ?? 0}%` })));
+        el("i", { style: `width:${p ?? 0}%` })), trustBadge(w));
   }));
 }
 

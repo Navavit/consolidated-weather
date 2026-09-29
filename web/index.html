@@ -115,6 +115,25 @@
 
     <section aria-labelledby="h-verify" class="verify">
       <h2 id="h-verify">🏆 โมเดลไหนแม่น <small id="v-sub">เทียบกับค่าที่วัดได้จริง</small></h2>
+      <div class="chips v-mode" role="tablist" aria-label="มุมมอง">
+        <button class="chip" id="vm-user" role="tab" type="button">👤 สำหรับผู้ใช้ทั่วไป</button>
+        <button class="chip" id="vm-wmo" role="tab" type="button">🔬 มาตรฐาน WMO (นักวิจัย)</button>
+      </div>
+
+      <div id="v-user">
+        <p class="note">คำถาม: <b>ถ้าเปิดเว็บนี้แล้วเห็นว่าฝนจะตก เชื่อได้แค่ไหน</b> — ใช้ช่วงเวลาเดียวกับตารางด้านบน (+3 ชม. … พรุ่งนี้ … D+7) นับจากเวลาที่ดึงพยากรณ์
+          และใช้เฉพาะพยากรณ์ที่มีให้ใช้จริง ณ เวลานั้น (โมเดลที่ส่งผลช้าก็ได้ข้อมูลเก่ากว่าจริง) · “ฝนตก” = ≥ 1 มม. ในช่วงนั้น</p>
+        <div class="chips" id="u-wins" role="tablist" aria-label="ช่วงเวลา"></div>
+        <div class="v-summary" id="u-summary" role="status"></div>
+        <div class="table-wrap" id="u-table"></div>
+        <div class="u-extra">
+          <div id="u-tod"></div>
+          <div id="u-rel"></div>
+        </div>
+        <p class="note" id="u-note"></p>
+      </div>
+
+      <div id="v-wmo">
 
       <!-- แผนภาพ: เปรียบเทียบอย่างไร -->
       <div class="v-how" aria-label="วิธีเปรียบเทียบ">
@@ -162,6 +181,8 @@
         </ul>
         <div id="v-points"></div>
       </details>
+
+      </div>
 
       <details class="v-help">
         <summary>⏱️ กรอบเวลาแบบสากล: นับ “ล่วงหน้า” อย่างไร</summary>
