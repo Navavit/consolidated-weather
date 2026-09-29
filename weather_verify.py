@@ -7,7 +7,7 @@
   user         ปุ่ม 🌧️/☀️ บนหน้าเว็บ                      ตก/ไม่ตก               ล่วงหน้า 3 ชม. – 8 วัน
 
 โครงสร้างใน branch data (archive/)
-  obs/tmd3h/YYYY-MM-DD.csv     ค่าวัดราย 3 ชม. เฉพาะสถานีจุดตรวจ
+  obs/tmd3h/YYYY-MM-DD.csv     ค่าวัดราย 3 ชม. ทุกสถานีอุตุฯ (~120)
   obs/tmdday/YYYY-MM-DD.csv    สรุป 07 น. ทุกสถานีอุตุฯ (~124) ใช้กับส่วนทั่วประเทศ
   obs/thaiwater/YYYY-MM-DD.csv เครื่องวัดฝนโทรมาตร เฉพาะจุดตรวจ
   verification/points.json                                 จุดตรวจ (สถานีที่ใกล้ตำแหน่งของผู้ใช้) — คงที่เมื่อเลือกแล้ว
@@ -43,6 +43,8 @@ SECTIONS = {
                     "variable": "rain", "source": "hii24h"},
     "user_rain": {"title": "ฝนตก/ไม่ตก · จากปุ่มบนหน้าเว็บ", "variable": "rain", "source": "user"},
     "tmd3h_temp": {"title": "อุณหภูมิ · สถานีอุตุฯ ใกล้ตำแหน่งของคุณ", "variable": "temp", "source": "tmd3h"},
+    "national3h_rain": {"title": "ฝนราย 3 ชม. · สถานีอุตุฯ ทั่วประเทศ", "variable": "rain", "source": "national3h"},
+    "national3h_temp": {"title": "อุณหภูมิราย 3 ชม. · สถานีอุตุฯ ทั่วประเทศ", "variable": "temp", "source": "national3h"},
     "national_tmax": {"title": "อุณหภูมิสูงสุดรายวัน · ทั่วประเทศ", "variable": "tmax", "source": "national"},
     "national_tmin": {"title": "อุณหภูมิต่ำสุดรายวัน · ทั่วประเทศ", "variable": "tmin", "source": "national"},
 }
@@ -365,7 +367,8 @@ def pairs_national(archive, cfg=None, max_days=14):
     obs = load_obs(archive, "tmdday", days=max_days)
     if obs.empty:
         return []
-    thr = cfg["rain_threshold_mm"]
+    thr, thr3 = cfg["rain_threshold_mm"], cfg["verify_threshold_mm"]
+    obs3 = load_obs(archive, "tmd3h", days=max_days)                      # ราย 3 ชม. ทุกสถานี (ใช้กับ national3h)
     recs = []
     for day, o in obs.groupby(obs["time"].dt.date):
         key = str(day)
@@ -407,6 +410,20 @@ def pairs_national(archive, cfg=None, max_days=14):
                             fc = float(pr.sum())
                             recs.append({**base, "variable": "rain", "fc": fc, "ob": float(ob["rain_24h"]),
                                          "ev_fc": fc >= thr, "ev_ob": ob["rain_24h"] >= thr})
+                        # ราย 3 ชม. ในวันเดียวกัน (สถานีเดียวกัน): ฝน (t-3h, t] และอุณหภูมิ ณ t
+                        o3 = obs3[(obs3["id"] == str(ob["id"])) & (obs3["time"] > T - pd.Timedelta(hours=24))
+                                  & (obs3["time"] <= T)] if len(obs3) else obs3
+                        for _, s3 in o3.iterrows():
+                            t3 = s3["time"]
+                            b3 = {**base, "source": "national3h", "obs_time": t3}
+                            h3 = [t3 - pd.Timedelta(hours=k) for k in (2, 1, 0)]
+                            v = pr.reindex(h3)
+                            if pd.notna(s3.get("rain_3h")) and v.notna().all():
+                                fc = float(v.sum())
+                                recs.append({**b3, "variable": "rain", "fc": fc, "ob": float(s3["rain_3h"]),
+                                             "ev_fc": fc >= thr3, "ev_ob": s3["rain_3h"] >= thr3})
+                            if pd.notna(s3.get("temp")) and t3 in tt.index and pd.notna(tt.at[t3]):
+                                recs.append({**b3, "variable": "temp", "fc": float(tt.at[t3]), "ob": float(s3["temp"])})
                         if tt.notna().all():
                             if pd.notna(ob["tmax"]):
                                 recs.append({**base, "variable": "tmax", "fc": float(tt.max()), "ob": float(ob["tmax"])})
@@ -472,9 +489,9 @@ def load_pairs(archive, days=None):
             df[col] = pd.Series(dtype=object)
     df["scheme"] = df["scheme"].astype(object)
     # คู่ทั่วประเทศแบบเก่าติดป้าย D+N แต่จริง ๆ คือ previous_dayN = ล่วงหน้า 24N ชม. รายชั่วโมง
-    nat = (df["source"] == "national") & df["lead"].astype(str).str.startswith("D+")
+    nat = df["source"].isin(["national", "national3h"]) & df["lead"].astype(str).str.startswith("D+")
     df.loc[nat, "lead"] = "H" + (df.loc[nat, "lead"].str[2:].astype(int) * 24).astype(str)
-    df.loc[df["source"] == "national", "scheme"] = SCHEME
+    df.loc[df["source"].isin(["national", "national3h"]), "scheme"] = SCHEME
     df = df.drop_duplicates(PAIR_KEYS, keep="last")
     if days:
         df = df[df["obs_time"] >= pd.Timestamp.now() - pd.Timedelta(days=days)]
@@ -594,11 +611,10 @@ def update(archive, locations, cfg=None, site_dir=None):
             print(f"⚠️ ค่าวัด {kind}: {e}")
             obs[kind] = []
     points = verification_points(archive, locations, obs["tmd3h"], obs["thaiwater"], cfg)
-    # เก็บเท่าที่โครงการใช้: ราย 3 ชม. และโทรมาตร เฉพาะจุดตรวจ, สรุป 07 น. ทุกสถานี (ใช้กับส่วนทั่วประเทศ)
+    # เก็บเท่าที่โครงการใช้: ราย 3 ชม. และสรุป 07 น. ทุกสถานีอุตุฯ (ส่วนทั่วประเทศ), โทรมาตรเฉพาะจุดตรวจ
     # ประวัติย้อนหลังของสถานีอุตุฯ ทั้งประเทศ ดึงเพิ่มได้จาก NOAA GSOD เมื่อต้องการ (docs/MODELS.md)
-    tmd_ids = {str(p["id"]) for p in points if p["kind"] == "tmd"}
     tw_ids = {str(p["id"]) for p in points if p["kind"] == "tw"}
-    archive_obs(archive, [s for s in obs["tmd3h"] if str(s["id"]) in tmd_ids], "tmd3h")
+    archive_obs(archive, obs["tmd3h"], "tmd3h")                              # ทุกสถานี (ใช้กับส่วนทั่วประเทศราย 3 ชม.)
     archive_obs(archive, obs["tmdday"], "tmdday")
     archive_obs(archive, [g for g in obs["thaiwater"] if str(g["id"]) in tw_ids], "thaiwater")
     log = collect_points(points, archive, cfg, google_for=locations[0][2] if locations else None)
