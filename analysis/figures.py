@@ -4,6 +4,7 @@
   Fig 2  เกาะความร้อนเมืองตอนกลางคืน: ที่วัดได้ vs ที่โมเดลทาย (หลังควบคุมตัวแปรกวน)
   Fig 3  ETS (frequency-matched) ฝน ≥ 10 มม. ตามช่วงล่วงหน้า
   Fig 4  ECMWF AIFS − IFS แบบจับคู่ (ETS, frequency-matched ETS, SEDI)
+  Fig 5  เกาะความร้อนเมืองตามชั่วโมง (ISD ทุก 3 ชม.): ที่วัดได้ vs ที่โมเดลทาย
 
   OUT_TAG=interim python3 analysis/figures.py
 """
@@ -119,8 +120,28 @@ def fig4_aifs():
     save(fig, "fig4_aifs_vs_ifs")
 
 
+def fig5_uhi_diurnal():
+    u = pd.read_csv(OUT / "subdaily_uhi_by_hour.csv")
+    hours = sorted(u.local_hour.unique())
+    fig, ax = plt.subplots(figsize=(5.6, 3.3))
+    o = u[u.model == "observed"].set_index("local_hour").reindex(hours)
+    ax.fill_between(range(len(hours)), o["lo"], o["hi"], color=INK, alpha=0.08, lw=0)
+    ax.plot(range(len(hours)), o["urban_minus_rural"], color=INK, lw=2.4, marker="o", ms=5, mec="white", mew=1.2, label="Observed (ISD)")
+    models = [m for m in MODEL_ORDER if m in set(u.model)]
+    for i, m in enumerate(models):
+        g = u[u.model == m].set_index("local_hour").reindex(hours)
+        ax.plot(range(len(hours)), g["urban_minus_rural"], color=SLOTS[i], lw=1.6, marker="o", ms=3.5, mec="white", mew=0.8, label=m)
+    ax.set_xticks(range(len(hours)), [f"{h:02d}" for h in hours])
+    ax.set_xlabel("Local time (UTC+7)")
+    ax.set_ylabel("Urban-centre minus rural T (°C)")
+    ax.axhline(0, color=MUTED, lw=1)
+    ax.set_title("Diurnal cycle of the urban–rural temperature contrast (lead ≥ 24 h)", fontsize=9, color=INK, loc="left")
+    ax.legend(fontsize=7, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.22))
+    save(fig, "fig5_uhi_diurnal")
+
+
 if __name__ == "__main__":
-    for f in (fig1_map, fig2_uhi, fig3_ets, fig4_aifs):
+    for f in (fig1_map, fig2_uhi, fig3_ets, fig4_aifs, fig5_uhi_diurnal):
         f()
         print("✓", f.__name__)
     print("→", FIG)

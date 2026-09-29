@@ -23,6 +23,9 @@
 - **NOAA GSOD** 2024-01 → 2025-08, ⟨120⟩ Thai WMO stations; GSOD day = 00–24 UTC = 07–07 local (matches Thai climatological day).
   - Precipitation QC: keep flag `G` (24-h complete); treat flag `I` with 0.00 as dry. Excluding `I` biases the sample to wet days (mean 9.3 vs 5.0 mm d⁻¹) — sensitivity reported.
   - Station coordinates from GSOD; 29 stations differ > 2 km from TMD API metadata (10 by > 10 km) → forecasts re-extracted at GSOD coordinates.
+- **Sub-daily (NOAA ISD-Lite)** same SYNOP reports as GSOD, 119 stations: 2-m temperature every 3 h (00…21 UTC = 07…04 local), 547,070 values.
+  Consistency with GSOD: 3-hourly max/min lie 1.1/1.0 °C inside GSOD Tmax/Tmin (expected from 3-h sampling).
+  Sub-daily rainfall in ISD for Thailand is not usable (mixed 1–24 h periods, mostly reported only when rain occurs; 06/12 UTC "24-h" values repeat the 00 UTC total; a 6-h reconstruction reproduces GSOD with r = 0.72 only) → sub-daily rain is verified prospectively (TMD 3-hourly at all stations, ThaiWater hourly gauges, from Sep 2026).
 - **Climatology** GSOD 2000–2023 (⟨834,943⟩ station-days): monthly rain means, ±7-day smoothed day-of-year Tmax/Tmin.
 - **Prospective** (Sep 2026 →): TMD 3-hourly synoptic obs, ThaiWater telemetry gauges (20 inner-Bangkok gauges ≥ 2 km apart; Ayutthaya), citizen reports.
   Includes the national HII WRF-ROMS (3 km, 12 UTC run, 12–12 UTC daily rain classes read from published maps) verified on its own 12–12 UTC window.
@@ -65,6 +68,12 @@
 - Model bias(urban) − bias(rural) for Tmin: −0.70 (ICON), −0.95 (GEM), −0.70 (IFS), −0.83 (ARPEGE) °C — **significant after two-way bootstrap + FDR**; GFS (−0.49, p = 0.03) and JMA (−0.25) not significant after FDR.
 - **Confounder-adjusted urban effect on Tmin bias: −0.70 to −1.04 °C** (CI excludes 0 for 5 of 6 models) — about the same size as the adjusted observed UHI, i.e. the models represent **almost none** of the urban night-time warming.
 - Tmax: no significant urban–rural difference in bias. Rain ≥ 10 mm ETS: urban 0.01–0.03 lower, not significant.
+
+### 4.4 Diurnal cycle of the urban heat island (ISD 3-hourly, lead ≥ 24 h) — interim 2024-03 → 2024-08
+- Observed urban-centre − rural T (raw): +1.65 °C (01, 04 local), **+1.79 °C (07)**, minimum +0.89 °C (13); two-way bootstrap CIs exclude 0 at all hours.
+- Models: +0.9 to +1.2 °C at night (IFS, ICON, GEM, ARPEGE); urban − rural bias difference significant at 19–10 local for IFS/ICON/GEM/ARPEGE, not at 13–16 local
+  → the missing warmth is concentrated at night and early morning (nocturnal UHI), consistent with 4.3. Figure 5.
+- ⟨final numbers once the hourly forecast refetch completes; add confounder-adjusted version at 01/04 local⟩
 
 ## 5. Discussion
 - Why models miss the nocturnal UHI: grid-box averaging over mixed urban/rural land, simplified or absent urban canopy schemes, 2-m diagnostic assumptions.
