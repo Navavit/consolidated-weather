@@ -63,22 +63,52 @@
       <div class="tiles" id="next"></div>
     </section>
 
-    <section aria-labelledby="h-verify">
+    <section aria-labelledby="h-verify" class="verify">
       <h2 id="h-verify">🏆 โมเดลไหนแม่น <small id="v-sub">เทียบกับค่าที่วัดได้จริง</small></h2>
+
+      <!-- แผนภาพ: เปรียบเทียบอย่างไร -->
+      <div class="v-how" aria-label="วิธีเปรียบเทียบ">
+        <ol class="v-steps">
+          <li><span class="v-ico">🖥️</span><b>1. เก็บพยากรณ์ไว้ก่อน</b><span>ทุกชั่วโมงระบบบันทึกว่าแต่ละโมเดล “ทายไว้ว่าอะไร”</span></li>
+          <li><span class="v-ico">⏳</span><b>2. รอให้วันจริงมาถึง</b><span>พยากรณ์ที่ออก 3 ชม. – 7 วัน ก่อนเหตุการณ์</span></li>
+          <li><span class="v-ico">🌧️</span><b>3. ดูค่าที่วัดได้จริง</b><span>จากสถานีอุตุฯ เครื่องวัดฝน หรือคนที่กดแจ้ง</span></li>
+          <li><span class="v-ico">✅</span><b>4. ให้คะแนน</b><span>ทายถูกไหม ทายเกินหรือขาดไปเท่าไร</span></li>
+        </ol>
+        <div class="v-tl" role="img" aria-label="ตัวอย่าง: พยากรณ์ที่ออกเมื่อวานสำหรับวันนี้ ถูกนำไปเทียบกับฝนที่วัดได้วันนี้">
+          <div class="tl-node"><span class="tl-dot"></span><b>ออกพยากรณ์</b><small>เมื่อวาน 07:00</small></div>
+          <div class="tl-gap"><small>ล่วงหน้า 1 วัน (D+1)</small><span class="tl-line"></span></div>
+          <div class="tl-box"><b>วันที่เทียบ: ฝนที่วัดได้จริง</b><small>07:00 → 07:00 วันถัดไป</small></div>
+        </div>
+      </div>
+
+      <h3 class="v-h3">เลือกว่าจะเทียบกับอะไร</h3>
+      <div class="v-sources" id="v-sources" role="tablist" aria-label="แหล่งค่าวัดจริง"></div>
       <div class="v-controls">
-        <label class="select"><span>เทียบกับ</span><select id="v-section"></select></label>
+        <div class="chips" id="v-vars" role="tablist" aria-label="ตัวแปร"></div>
         <div class="chips" id="v-leads" role="tablist" aria-label="ช่วงเวลาล่วงหน้า"></div>
       </div>
+
+      <div class="v-summary" id="v-summary" role="status"></div>
       <div class="table-wrap" id="v-table"></div>
-      <div class="table-wrap v-ens" id="v-ens"></div>
+      <details class="v-more"><summary>รายละเอียดคะแนนเชิงเทคนิค + ensemble</summary>
+        <div class="table-wrap" id="v-table-full"></div>
+        <div class="table-wrap v-ens" id="v-ens"></div>
+      </details>
       <p class="note" id="v-note"></p>
-      <details class="v-help">
-        <summary>วิธีอ่านคะแนน และจุดตรวจที่ใช้</summary>
+
+      <details class="v-help" open>
+        <summary>ให้คะแนนอย่างไร</summary>
+        <div class="v-matrix" aria-label="ตารางการให้คะแนนฝน">
+          <div></div><div class="vm-h">ฝนตกจริง 🌧️</div><div class="vm-h">ไม่ตกจริง ☀️</div>
+          <div class="vm-h">โมเดลทายว่าตก</div><div class="vm good">✅ ถูก<small>(จับฝนได้)</small></div><div class="vm bad">⚠️ เตือนเกิน<small>(ทายตกแต่ไม่ตก)</small></div>
+          <div class="vm-h">โมเดลทายว่าไม่ตก</div><div class="vm bad">❌ พลาด<small>(ฝนตกแต่ไม่ได้เตือน)</small></div><div class="vm good">✅ ถูก<small>(ไม่ตกตามที่ทาย)</small></div>
+        </div>
         <ul>
-          <li><b>CSI</b> — ทายว่าตกแล้วตกจริง เทียบกับทุกครั้งที่ตกจริงหรือทายว่าตก (ยิ่งสูงยิ่งดี ไม่ถูกหลอกด้วยวันที่ไม่ตก)</li>
-          <li><b>ทายถูก</b> — ตก/ไม่ตก ถูกกี่ % · <b>POD</b> — ฝนตกจริงแล้วทายถูกกี่ % · <b>FAR</b> — ทายว่าตกแต่ไม่ตกกี่ % (ต่ำดี)</li>
-          <li><b>Bias</b> — &gt;1 ทายว่าตกบ่อยเกิน, &lt;1 ทายว่าตกน้อยเกิน · <b>MAE</b> — คลาดเคลื่อนเฉลี่ย (มม. หรือ °C, ต่ำดี) · <b>Brier</b> — ความคลาดของ “โอกาสฝน” จาก ensemble (0 = สมบูรณ์)</li>
-          <li>จัดอันดับแยกตามช่วงเวลาล่วงหน้า เพราะแต่ละโมเดลพยากรณ์ได้ไกลไม่เท่ากัน · ดูค่า <b>n</b> ประกอบเสมอ ยิ่งมากยิ่งเชื่อถือได้</li>
+          <li><b>คะแนนทายฝน</b> (CSI) = จำนวน “✅ จับฝนได้” ÷ (จับได้ + พลาด + เตือนเกิน) — ไม่นับวันที่ไม่ตกทั้งคู่ จึงวัดความเก่งเรื่องฝนจริง ๆ (0–100, ยิ่งสูงยิ่งดี)</li>
+          <li><b>ทายถูก %</b> = ถูกทั้งสองแบบ ÷ ทั้งหมด — ในช่วงแล้งอาจสูงเกินจริง เพราะทายว่า “ไม่ตก” ตลอดก็ถูกเกือบทุกวัน</li>
+          <li><b>นิสัยของโมเดล</b> — ทายฝนบ่อยเกิน (เตือนเกินบ่อย) / พอดี / ทายฝนน้อยเกิน (พลาดบ่อย)</li>
+          <li>อุณหภูมิ: <b>คลาดเฉลี่ย</b> (°C) ยิ่งน้อยยิ่งดี และบอกว่ามักทาย <b>สูงไป</b> หรือ <b>ต่ำไป</b></li>
+          <li>จัดอันดับแยกตามช่วงล่วงหน้า เพราะโมเดลพยากรณ์ได้ไกลไม่เท่ากัน · ถ้าจำนวนครั้งยังน้อย (<30) ผลยังไม่นิ่ง</li>
         </ul>
         <div id="v-points"></div>
       </details>

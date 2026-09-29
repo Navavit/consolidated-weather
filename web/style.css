@@ -170,12 +170,53 @@ body.about-mode #edit-loc { display: none; }
 .about-list li { margin: 4px 0; }
 
 /* โมเดลไหนแม่น */
-.v-controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 10px; }
-.v-ens { margin-top: 10px; }
-.v-help { margin-top: 8px; font-size: 13px; color: var(--ink-2); }
-.v-help summary { cursor: pointer; color: var(--series-1); }
-.v-help ul { padding-left: 18px; margin: 6px 0; }
+.v-how { background: var(--surface); border-radius: 12px; box-shadow: 0 0 0 1px var(--ring); padding: 14px 16px; }
+.v-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.v-steps li { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--ink-2); position: relative; }
+.v-steps li b { color: var(--ink); font-size: 14px; }
+.v-ico { font-size: 22px; line-height: 1; }
+.v-tl { display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.tl-node, .tl-box { display: flex; flex-direction: column; font-size: 13px; }
+.tl-node small, .tl-box small, .tl-gap small { color: var(--ink-2); font-size: 12px; }
+.tl-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--series-1); box-shadow: 0 0 0 2px var(--surface); margin-bottom: 4px; }
+.tl-gap { flex: 1 1 120px; display: flex; flex-direction: column; align-items: center; min-width: 110px; }
+.tl-line { position: relative; width: 100%; height: 2px; background: var(--series-1); margin-top: 4px; }
+.tl-line::after { content: ""; position: absolute; right: -2px; top: -5px; border: 6px solid transparent; border-left: 9px solid var(--series-1); border-right: 0; }
+.tl-box { background: var(--band); border: 1.5px solid var(--series-1); border-radius: 8px; padding: 6px 12px; }
+.v-h3 { font-size: 15px; margin: 18px 0 8px; }
+.v-sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px; }
+@media (max-width: 560px) {
+  .v-sources { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .v-card { padding: 10px; }
+  .v-card b { font-size: 13.5px; }
+  .v-desc { font-size: 11.5px; }
+  .meter.wide { width: 60px; }
+}
+.v-card { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; font: inherit; color: var(--ink);
+  background: var(--surface); border: 0; border-radius: 12px; box-shadow: 0 0 0 1px var(--ring); padding: 12px 14px; cursor: pointer; }
+.v-card[aria-selected="true"] { box-shadow: 0 0 0 2px var(--series-1); }
+.v-card b { font-size: 14.5px; }
+.v-desc { font-size: 12.5px; color: var(--ink-2); }
+.v-badge { font-size: 12px; margin-top: 4px; padding: 1px 8px; border-radius: 999px; box-shadow: 0 0 0 1px var(--ring); color: var(--ink-2); }
+.v-badge.ok { box-shadow: inset 3px 0 0 var(--good), 0 0 0 1px var(--ring); }
+.v-controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 12px 0 10px; }
+.v-summary p { margin: 0 0 10px; font-size: 15px; background: var(--surface); border-radius: 10px; padding: 10px 14px; box-shadow: inset 4px 0 0 var(--series-1), 0 0 0 1px var(--ring); }
+.v-simple td, .v-simple th { vertical-align: middle; }
+.barcell { text-align: left; white-space: nowrap; }
+.habit { font-size: 12.5px; color: var(--ink-2); }
+.habit.ok { color: var(--ink); }
+.v-more, .v-help { margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+.v-more summary, .v-help summary { cursor: pointer; color: var(--series-1); font-size: 14px; }
+.v-more .table-wrap { margin-top: 8px; }
+.v-help ul { padding-left: 18px; margin: 8px 0; }
+.v-matrix { display: grid; grid-template-columns: minmax(110px, auto) 1fr 1fr; gap: 4px; max-width: 520px; margin: 10px 0; font-size: 13px; }
+.vm-h { color: var(--ink-2); font-weight: 600; padding: 6px 8px; display: flex; align-items: center; }
+.vm { border-radius: 8px; padding: 8px 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--ring); color: var(--ink); display: flex; flex-direction: column; }
+.vm small { color: var(--ink-2); font-size: 11.5px; }
+.vm.good { box-shadow: inset 3px 0 0 var(--good), 0 0 0 1px var(--ring); }
+.vm.bad { box-shadow: inset 3px 0 0 var(--serious), 0 0 0 1px var(--ring); }
 .meter { display: inline-block; width: 70px; height: 6px; border-radius: 3px; background: var(--grid); vertical-align: middle; margin-left: 6px; }
+.meter.wide { width: 110px; margin-left: 0; }
 .meter > i { display: block; height: 100%; border-radius: 3px; background: var(--series-1); }
 td.num { text-align: right; }
 td.rank { color: var(--muted); width: 1%; }
