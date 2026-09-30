@@ -612,17 +612,19 @@ function renderNow() {
 //   RQ4 การแจ้งของประชาชน → ปุ่มบนหน้าเว็บ
 // (สถานีอุตุฯ ใกล้ตำแหน่ง tmd3h ยังคำนวณอยู่ แต่ซ้ำกับส่วนทั่วประเทศ จึงไม่แสดง)
 const V_SOURCES = [
-  { key: "national", icon: "🗺️", title: "สถานีอุตุฯ ทั่วประเทศ", desc: "~120 สถานี · เมือง vs ชนบท (RQ1–2)",
+  { key: "national", icon: "🗺️", title: "สถานีอุตุฯ ทั่วประเทศ", desc: "~120 สถานี + โทรมาตร ~3,200 เครื่อง · เมือง vs ชนบท (RQ1–2)",
     vars: [["national_rain", "ฝนรายวัน"], ["national3h_rain", "ฝน 3 ชม."], ["national_tmin", "อุณหภูมิต่ำสุด"],
-      ["national_tmax", "อุณหภูมิสูงสุด"], ["national3h_temp", "อุณหภูมิ 3 ชม."]],
+      ["national_tmax", "อุณหภูมิสูงสุด"], ["national3h_temp", "อุณหภูมิ 3 ชม."], ["allgauge_rain", "ฝนรายวัน · โทรมาตรทุกเครื่อง"]],
     wait: "คำนวณวันละครั้งหลังกรมอุตุฯ สรุปผล 07.00 น." },
-  { key: "tw", icon: "🏙️", title: "เครื่องวัดฝนในเมือง", desc: "กทม. + อยุธยา · โมเดลละเอียดสูง (RQ3)",
-    vars: [["thaiwater24h_rain", "ฝนรายวัน 07–07 น."], ["tw3h_rain", "ฝน 3 ชม."], ["hii24h_rain", "ฝน 19–19 น. (เทียบ HII)"]], kind: "tw",
+  { key: "tw", icon: "🏙️", title: "เครื่องวัดฝนในเมือง", desc: "โทรมาตรทุกเครื่องในเขตเมือง + จุดตรวจ กทม./อยุธยา · โมเดลละเอียดสูง (RQ3)",
+    vars: [["urbangauge_rain", "ฝนรายวัน · ทุกเครื่องในเขตเมือง"], ["thaiwater24h_rain", "ฝนรายวัน · จุดตรวจ"], ["tw3h_rain", "ฝน 3 ชม."],
+      ["hii24h_rain", "ฝน 19–19 น. (เทียบ HII)"]], kind: "tw",
     wait: "ใช้รอบรันที่ออกก่อนต้นช่วงวัด · HII ออกผลวันละรอบ 19:00 น." },
   { key: "user", icon: "🙋", title: "คนแจ้งผ่านปุ่ม", desc: "ตก / ไม่ตก จากปุ่มด้านบนสุด (RQ4)",
     vars: [["user_rain", "ตก/ไม่ตก"]], wait: "ยังไม่มีการกดปุ่ม 🌧️/☀️ ด้านบน" },
 ];
 function leadText(l) {
+  if (l.includes("|")) { const [b, g] = l.split("|"); return `${leadText(b)} · ${g}`; }
   if (l.startsWith("T+")) return `T+${l.slice(2).replace("-", "–")} ชม.`;     // นับจากรอบรัน (WMO)
   if (l.startsWith("D+")) return `Day ${l.slice(2)}`;
   if (/^H\d+$/.test(l)) return `ล่วงหน้า ≥ ${l.slice(1)} ชม.`;

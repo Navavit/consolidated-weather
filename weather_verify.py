@@ -697,8 +697,18 @@ def update(archive, locations, cfg=None, site_dir=None):
         print(f"มุมผู้ใช้: {usermode.update(archive, points, cfg)} แถว")
     except Exception as e:
         print(f"⚠️ มุมผู้ใช้: {e}")
+    import weather_gauges as gauges                          # ฝนรายวันที่โทรมาตรทุกเครื่อง (Previous Runs)
+    try:
+        n_obs = gauges.archive_yesterday(archive)
+        print(f"โทรมาตรทุกเครื่อง: ค่าวัดใหม่ {n_obs} · " + " · ".join(gauges.update(archive, cfg)))
+    except Exception as e:
+        print(f"⚠️ โทรมาตรทุกเครื่อง: {e}")
     if site_dir:
         lb = leaderboard(archive, days=int(cfg.get("leaderboard_days", 30)), cfg=cfg)
+        try:
+            lb["sections"] += gauges.sections(archive, days=int(cfg.get("leaderboard_days", 30)), cfg=cfg)
+        except Exception as e:
+            print(f"⚠️ คะแนนโทรมาตรทุกเครื่อง: {e}")
         try:
             lb["user_mode"] = usermode.summary(archive, days=int(cfg.get("leaderboard_days", 30)))
         except Exception as e:

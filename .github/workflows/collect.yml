@@ -4,7 +4,7 @@
 #
 # GitHub มักข้ามรอบตามตารางเมื่อเครื่องแน่น (เคยห่างกัน 4–7 ชม.) จึงตั้งไว้ 2 เวลาต่อชั่วโมง
 # และให้บริการภายนอก (cron-job.org) สั่งรันผ่าน API ด้วย (docs/SCHEDULER.md)
-# รอบที่ห่างจากรอบที่สำเร็จก่อนหน้า < 40 นาทีจะข้ามเอง ไม่เปลืองโควตา Open-Meteo/Google
+# รอบที่ห่างจากรอบที่สำเร็จก่อนหน้า < 50 นาทีจะข้ามเอง ไม่เปลืองโควตา Open-Meteo/Google
 name: ดึงพยากรณ์อัตโนมัติ
 
 on:
@@ -14,7 +14,7 @@ on:
   workflow_dispatch:              # กดรันเองได้จากแท็บ Actions / cron-job.org
     inputs:
       force:
-        description: "รันแม้เพิ่งรันไปไม่ถึง 40 นาที"
+        description: "รันแม้เพิ่งรันไปไม่ถึง 50 นาที"
         type: boolean
         default: false
 
@@ -30,7 +30,7 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     outputs:
       skip: ${{ steps.gap.outputs.skip }}
     steps:
@@ -44,7 +44,7 @@ jobs:
         run: |
           last=$(cat archive/last_run.txt 2>/dev/null || echo 0)
           now=$(date +%s)
-          if [ "${{ inputs.force }}" != "true" ] && [ $((now - last)) -lt 2400 ]; then
+          if [ "${{ inputs.force }}" != "true" ] && [ $((now - last)) -lt 3000 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "รอบก่อนเพิ่งรันไป $(((now - last) / 60)) นาที ข้ามรอบนี้"
           else
