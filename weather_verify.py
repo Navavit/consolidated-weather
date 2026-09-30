@@ -743,4 +743,14 @@ def update(archive, locations, cfg=None, site_dir=None):
         (Path(site_dir) / "data" / "verification.json").write_text(
             json.dumps(_clean(lb), ensure_ascii=False, allow_nan=False), encoding="utf-8")
         write_hii_json(site_dir, hii_init, hii_df, locations)
+        # แผนที่สถานีถูกเขียนก่อนเลือกจุดตรวจรอบนี้ → อัปเดตวงแหวนจุดตรวจให้ตรงกับรายการล่าสุด
+        st_path = Path(site_dir) / "data" / "stations.json"
+        if st_path.exists():
+            st = json.loads(st_path.read_text(encoding="utf-8"))
+            ids = {str(p["id"]) for p in points if p.get("active", True)}
+            ci = st["tw_cols"].index("check")
+            for r in st["tw"]:
+                r[ci] = str(r[0]) in ids
+            st["check_ids"] = sorted(ids)
+            st_path.write_text(json.dumps(st, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return points
