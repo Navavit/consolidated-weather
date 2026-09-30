@@ -38,5 +38,8 @@
       "radius_km": 15,
       "min_spacing_km": 2
     }
-  }
+  },
+  "site_locations": [
+    "กรุงเทพมหานคร"
+  ]
 }

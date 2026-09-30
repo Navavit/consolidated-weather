@@ -102,6 +102,9 @@ def write_site(results, out_dir, cfg=None):
     order = list((cfg or core.CFG).get("site_order") or [])
     rank = lambda r: order.index(r["name"]) if r["name"] in order else len(order)
     results = sorted(results, key=rank)         # sorted คงลำดับเดิมของตำแหน่งที่ไม่ได้ระบุ
+    shown = (cfg or core.CFG).get("site_locations")        # แสดงบนเว็บเฉพาะตำแหน่งเหล่านี้ (ที่เหลือยังเก็บข้อมูลตามปกติ)
+    if shown:
+        results = [r for r in results if r["name"] in shown]
     index = []
     for i, r in enumerate(results):
         fname = f"loc-{i}.json"
