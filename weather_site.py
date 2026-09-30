@@ -126,8 +126,26 @@ def write_site(results, out_dir, cfg=None):
     (out / "data" / "meta.json").write_text(json.dumps(client_meta(cfg), ensure_ascii=False), encoding="utf-8")
     (out / "data" / "now_obs.json").write_text(json.dumps(
         {"tmd": obs.get("tmd", []), "air": obs.get("air", [])}, ensure_ascii=False), encoding="utf-8")
+    (out / "data" / "stations.json").write_text(json.dumps(stations_payload(obs), ensure_ascii=False,
+                                                           separators=(",", ":")), encoding="utf-8")
     (out / ".nojekyll").write_text("")
     return out
+
+
+def stations_payload(obs, archive=core.ROOT / "archive"):
+    """แผนที่สถานี: โทรมาตร ThaiWater ทุกเครื่อง (แบบตาราง ประหยัดขนาด) + จุดตรวจที่ใช้เทียบโมเดล"""
+    pts = Path(archive) / "verification" / "points.json"
+    check = {str(p["id"]) for p in json.loads(pts.read_text(encoding="utf-8"))} if pts.exists() else set()
+    dens = {}
+    res = core.ROOT / "resources" / "gauges.csv"
+    if res.exists():
+        d = pd.read_csv(res, dtype={"id": str})
+        dens = dict(zip(d["id"], d["pop_density"]))
+    cols = ["id", "name", "area", "agency", "lat", "lon", "time", "rain_24h", "density", "check"]
+    rows = [[g["id"], g["name"], g["area"], g["agency"], round(g["lat"], 5), round(g["lon"], 5), g["time"][:16],
+             g["rain_24h"], dens.get(str(g["id"])), str(g["id"]) in check] for g in obs.get("tw", [])]
+    return {"generated": pd.Timestamp.now(tz="Asia/Bangkok").isoformat(timespec="minutes"),
+            "tw_cols": cols, "tw": rows, "check_ids": sorted(check)}
 
 
 def observations_summary(archive=core.ROOT / "archive", last=5):

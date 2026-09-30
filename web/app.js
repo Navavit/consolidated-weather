@@ -135,7 +135,8 @@ async function init() {
     $("edit-loc").hidden = true;
   }
   $("updated").textContent = `อัปเดต ${timeAgo(state.index.generated)} · ${new Date(state.index.generated).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}`;
-  const wantAbout = location.hash === "#about";     // อ่านก่อน เพราะการเลือกตำแหน่งจะล้าง hash
+  const wantAbout = location.hash === "#about";
+  initFolds();     // อ่านก่อน เพราะการเลือกตำแหน่งจะล้าง hash
   initRainBar();
   getJSON("data/verification.json").then((v) => {
     state.verify = v; renderVerify(); renderUserMode();
@@ -152,6 +153,21 @@ async function init() {
   if (wantAbout) showAbout(true);
   let t;
   window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(renderCharts, 150); });
+}
+
+// ส่วน ③–⑤ พับได้ (ปิดไว้เป็นค่าเริ่มต้น จำสถานะต่อเครื่อง) · กดลำดับเนื้อหาด้านบนแล้วเปิดให้เอง
+function initFolds() {
+  document.querySelectorAll("details.fold").forEach((d) => {
+    if (store.get(`fold:${d.id}`) === "1") d.open = true;
+    d.addEventListener("toggle", () => {
+      store.set(`fold:${d.id}`, d.open ? "1" : "0");
+      if (d.open && d.id === "step-4") renderCharts();
+    });
+  });
+  document.querySelectorAll("#steps a").forEach((a) => a.addEventListener("click", () => {
+    const t = document.querySelector(a.getAttribute("href"));
+    if (t && t.tagName === "DETAILS") t.open = true;
+  }));
 }
 
 function applyTheme(theme) {
@@ -1160,7 +1176,7 @@ function drawChart(spec, width) {
 }
 
 function renderCharts() {
-  if (!state.loc) return;
+  if (!state.loc || !$("step-4").open) return;                   // กล่องพับอยู่ = ไม่รู้ความกว้าง วาดตอนเปิด
   const box = $("charts");
   box.replaceChildren();
   CHARTS.forEach((spec) => {
@@ -1205,6 +1221,97 @@ function initMap() {
   state.map.setView([locs[0].lat, locs[0].lon], 8);
   requestAnimationFrame(() => state.map.invalidateSize());   // ขนาดกล่องแผนที่อาจยังไม่ถูกคำนวณตอนสร้าง
   loadRadar();
+  loadStations();
+}
+
+// ---------------------------------------------------------------------------
+// สถานีวัดบนแผนที่: โทรมาตร ThaiWater ทุกเครื่อง (แยกตามหน่วยงาน) + สถานีอุตุฯ + Air4Thai · กรองชั้นได้
+// ---------------------------------------------------------------------------
+const MAP_RAIN = [0.1, 1, 5, 10, 20, 35, 50, 90];                 // มม./24 ชม.
+const PM_COLOR = [[15, "#2a78d6"], [25, "#1baf7a"], [37.5, "#eda100"], [75, "#eb6834"], [Infinity, "#e34948"]];
+const AGENCY_FULL = { "สสน.": "สถาบันสารสนเทศทรัพยากรน้ำ", "ทน.": "กรมทรัพยากรน้ำ", "ปภ.": "กรมป้องกันและบรรเทาสาธารณภัย",
+  "ชป.": "กรมชลประทาน", "อต.": "กรมอุตุนิยมวิทยา (โทรมาตร)", "กฟผ.": "การไฟฟ้าฝ่ายผลิตแห่งประเทศไทย", "สนน. กทม.": "สำนักการระบายน้ำ กทม." };
+const mapLayers = { groups: {}, meta: [] };
+const rainFill = (v) => (v == null ? "#9a9a9a" : v < MAP_RAIN[0] ? cssVar("--surface") : stepColor(v, MAP_RAIN) || cssVar("--surface"));
+async function loadStations() {
+  const [st, now] = await Promise.all([getJSON("data/stations.json").catch(() => null),
+    state.nowObs ? state.nowObs : getJSON("data/now_obs.json").catch(() => ({ tmd: [], air: [] }))]);
+  state.nowObs = now;
+  if (!st && !now.tmd.length) return;
+  state.map.createPane("stations").style.zIndex = 390;             // ใต้วงกลมตำแหน่ง เหนือเรดาร์
+  const renderer = L.canvas({ pane: "stations", padding: 0.3 });
+  const check = new Set(st?.check_ids || []);
+  const add = (key, label, icon, markers, on) => {
+    mapLayers.groups[key] = L.layerGroup(markers);
+    mapLayers.meta.push({ key, label, icon, n: markers.length, on });
+  };
+  // สถานีอุตุฯ (กรมอุตุฯ)
+  add("tmd", "สถานีอุตุฯ", "📡", now.tmd.map((x) => L.circleMarker([x.lat, x.lon], {
+    renderer, radius: 6.5, weight: 2.2, color: cssVar("--ink"), fillColor: rainFill(x.rain_24h), fillOpacity: 1,
+  }).bindPopup(() => el("div", { class: "pop" }, el("b", {}, `📡 สถานี${x.name}`), el("div", { class: "muted" }, `${x.province || ""} · กรมอุตุนิยมวิทยา`),
+    el("div", {}, `ฝน 24 ชม. ${fmt(x.rain_24h)} มม. · 3 ชม. ${fmt(x.rain_3h)} มม.`),
+    el("div", {}, `อุณหภูมิ ${fmt(x.temp)} °C · ความชื้น ${fmt(x.rh, 0)}%`),
+    el("div", { class: "muted" }, `เวลา ${String(x.time || "").slice(0, 16).replace("T", " ")} น.${check.has(String(x.id)) ? " · ⭕ จุดตรวจ" : ""}`)))), true);
+  // โทรมาตร ThaiWater แยกตามหน่วยงาน (หน่วยงานเล็กรวมเป็น "อื่น ๆ")
+  if (st) {
+    const C = Object.fromEntries(st.tw_cols.map((c, i) => [c, i]));
+    const byAg = {};
+    st.tw.forEach((r) => { (byAg[r[C.agency] || "อื่น ๆ"] ||= []).push(r); });
+    const small = Object.keys(byAg).filter((a) => byAg[a].length < 30);
+    small.forEach((a) => { if (a !== "อื่น ๆ") { (byAg["อื่น ๆ"] ||= []).push(...byAg[a]); delete byAg[a]; } });
+    Object.entries(byAg).sort((a, b) => b[1].length - a[1].length).forEach(([ag, rows]) => {
+      add(`tw:${ag}`, `โทรมาตร ${ag}`, "💧", rows.map((r) => L.circleMarker([r[C.lat], r[C.lon]], {
+        renderer, radius: 3.6, weight: 0.8, color: "rgba(80,80,80,.55)", fillColor: rainFill(r[C.rain_24h]), fillOpacity: 0.95,
+      }).bindPopup(() => el("div", { class: "pop" }, el("b", {}, `💧 ${r[C.name]}`), el("div", { class: "muted" }, r[C.area]),
+        el("div", {}, `ฝน 24 ชม. ${fmt(r[C.rain_24h])} มม.`),
+        el("div", { class: "muted" }, `${AGENCY_FULL[r[C.agency]] || r[C.agency] || "–"} · เวลา ${r[C.time]} น.`),
+        r[C.density] != null ? el("div", { class: "muted" }, `ความหนาแน่นประชากร ${Number(r[C.density]).toLocaleString("th-TH")} คน/ตร.กม. (${r[C.density] >= 1500 ? "เขตเมือง" : r[C.density] >= 300 ? "ชานเมือง" : "ชนบท"})`) : null,
+        r[C.check] ? el("div", {}, "⭕ จุดตรวจที่ใช้เทียบโมเดล") : null))), true);
+    });
+    // จุดตรวจ (วงแหวน)
+    const rings = st.tw.filter((r) => r[C.check]).map((r) => L.circleMarker([r[C.lat], r[C.lon]], {
+      renderer, radius: 8, weight: 2, color: "#eb6834", fill: false, interactive: false }));
+    now.tmd.filter((x) => check.has(String(x.id))).forEach((x) => rings.push(L.circleMarker([x.lat, x.lon], {
+      renderer, radius: 10, weight: 2, color: "#eb6834", fill: false, interactive: false })));
+    add("check", "จุดตรวจเทียบโมเดล", "⭕", rings, true);
+  }
+  // PM2.5 (Air4Thai)
+  add("air", "PM2.5", "😷", now.air.map((x) => L.circleMarker([x.lat, x.lon], {
+    renderer, radius: 5, weight: 1, color: "#fff", fillColor: PM_COLOR.find(([lim]) => x.pm25 < lim)[1], fillOpacity: 0.95,
+  }).bindPopup(() => el("div", { class: "pop" }, el("b", {}, `😷 ${x.name}`), el("div", { class: "muted" }, x.area),
+    el("div", {}, `PM2.5 ${fmt(x.pm25)} มคก./ลบ.ม. · ${x.level}`),
+    el("div", { class: "muted" }, `Air4Thai (กรมควบคุมมลพิษ) · ${String(x.time).replace("T", " ").slice(0, 16)} น.`)))), false);
+  let saved = null;
+  try { saved = JSON.parse(store.get("map-layers") || "null"); } catch { saved = null; }
+  mapLayers.on = new Set(saved || mapLayers.meta.filter((m) => m.on).map((m) => m.key));
+  renderMapLayers();
+}
+function renderMapLayers() {
+  for (const m of mapLayers.meta) {
+    const g = mapLayers.groups[m.key], want = mapLayers.on.has(m.key);
+    if (want && !state.map.hasLayer(g)) g.addTo(state.map);
+    if (!want && state.map.hasLayer(g)) g.remove();
+  }
+  const toggle = (k) => { mapLayers.on.has(k) ? mapLayers.on.delete(k) : mapLayers.on.add(k);
+    store.set("map-layers", JSON.stringify([...mapLayers.on])); renderMapLayers(); };
+  const tw = mapLayers.meta.filter((m) => m.key.startsWith("tw:"));
+  const allTw = tw.every((m) => mapLayers.on.has(m.key));
+  $("map-layers").replaceChildren(
+    ...mapLayers.meta.filter((m) => !m.key.startsWith("tw:")).slice(0, 1).map(chip),
+    tw.length ? el("button", { class: "chip", type: "button", "aria-pressed": String(allTw), onclick: () => {
+      tw.forEach((m) => (allTw ? mapLayers.on.delete(m.key) : mapLayers.on.add(m.key)));
+      store.set("map-layers", JSON.stringify([...mapLayers.on])); renderMapLayers(); } },
+      `💧 โทรมาตรทั้งหมด`, el("span", { class: "chip-n" }, ` ${tw.reduce((a, m) => a + m.n, 0).toLocaleString("th-TH")}`)) : null,
+    ...tw.map(chip), ...mapLayers.meta.filter((m) => !m.key.startsWith("tw:")).slice(1).map(chip));
+  function chip(m) {
+    return el("button", { class: "chip small-chip", type: "button", "aria-pressed": String(mapLayers.on.has(m.key)),
+      title: AGENCY_FULL[m.label.replace("โทรมาตร ", "")] || m.label, onclick: () => toggle(m.key) },
+      `${m.icon} ${m.label}`, el("span", { class: "chip-n" }, ` ${m.n.toLocaleString("th-TH")}`));
+  }
+  const sw = (bg, t, ring) => el("span", { class: "lg" }, el("i", { style: `background:${bg}${ring ? ";box-shadow:0 0 0 2px " + ring : ""}` }), t);
+  $("map-legend").replaceChildren(el("span", { class: "muted" }, "ฝน 24 ชม. (มม.):"), sw(cssVar("--surface"), "0", "#bbb"),
+    ...MAP_RAIN.slice(0, -1).map((v, i) => sw(stepColor(v, MAP_RAIN), `${v}–${MAP_RAIN[i + 1]}`)), sw(stepColor(999, MAP_RAIN), `≥ ${MAP_RAIN.at(-1)}`),
+    sw("#9a9a9a", "ไม่มีค่า"));
 }
 
 // เรดาร์ฝนจาก RainViewer: ภาพทุก 10 นาที ย้อนหลัง ~2 ชม. (ความละเอียดสูงสุดที่ zoom 7)

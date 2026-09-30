@@ -170,9 +170,14 @@ def collect_points(points, archive, cfg=None, google_for=None):
     google_for = ชื่อตำแหน่งของฉัน: จุดตรวจของตำแหน่งนี้ดึง Google Weather 48 ชม. ทุก 2 ชม.
     """
     log = []
+    # Google เฉพาะ 2 จุดของตำแหน่งแรก (สถานีอุตุฯ + โทรมาตรที่ใกล้ที่สุด) ให้อยู่ในโควตาฟรี แม้ตำแหน่งนั้นมีจุดตรวจหลายสิบจุด
+    mine = [p for p in points if p.get("for") == google_for]
+    gpts = {p["key"] for p in mine if p["kind"] == "tmd"}
+    tws = sorted((p for p in mine if p["kind"] == "tw"), key=lambda p: p.get("dist_km", 99))
+    gpts |= {p["key"] for p in tws[:1]}
     for p in points:
         gkey = f"pt:{p['key']}"
-        google = 48 if p.get("for") == google_for and core.google_allowed(archive, gkey, 100, cfg) else None
+        google = 48 if p["key"] in gpts and core.google_allowed(archive, gkey, 100, cfg) else None
         try:
             data, now, tz = core.fetch_deterministic(p["lat"], p["lon"], cfg, google)
             if google:

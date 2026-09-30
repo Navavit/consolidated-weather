@@ -276,3 +276,23 @@ th .wsub, .tile .wsub, .card h3 .wsub { display: block; font-weight: 400; font-s
 .trust.wait { color: var(--muted); }
 .u-extra { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 10px; }
 .u-extra h4 { margin: 6px 0; font-size: 14px; }
+
+/* ส่วนพับได้ */
+details.fold { margin: 22px 0 0; border-radius: 12px; box-shadow: 0 0 0 1px var(--ring); background: var(--surface); }
+details.fold > summary { cursor: pointer; list-style: none; padding: 14px 16px; font-size: 18px; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary::after { content: "▸ เปิดดู"; margin-left: auto; font-size: 13px; color: var(--muted); }
+details.fold[open] > summary::after { content: "▾ ย่อ"; }
+details.fold > summary small { font-size: 13px; color: var(--muted); font-weight: 400; }
+details.fold > section { padding: 0 16px 8px; }
+details.fold[id^="step-"] { scroll-margin-top: 12px; }
+body.about-mode main > details.fold { display: none; }
+/* แผนที่สถานี */
+.map-tools { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.map-layers .chip { font-size: 13px; padding: 4px 10px; }
+.map-layers .chip[aria-pressed="false"] { opacity: .5; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; align-items: center; }
+.map-legend .lg { display: inline-flex; align-items: center; gap: 4px; }
+.map-legend .lg i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 1px rgba(0,0,0,.2); }
+.pop { font-size: 13px; line-height: 1.5; min-width: 180px; }
+main > details.fold:last-of-type { margin-bottom: 28px; }

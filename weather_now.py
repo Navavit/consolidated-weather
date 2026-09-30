@@ -157,9 +157,9 @@ def nearest(lat, lon, stations, max_km=MAX_STATION_KM):
 
 
 def fetch_all(cfg=None):
-    """ดึงทั้งสองแหล่งครั้งเดียว ใช้กับทุกตำแหน่ง (ล้มเหลวแหล่งไหนก็ข้ามแหล่งนั้น)"""
-    out = {"tmd": [], "air": []}
-    for key, fn in (("tmd", lambda: fetch_tmd_stations(cfg)), ("air", fetch_air4thai)):
+    """ดึงทุกแหล่งครั้งเดียว ใช้กับทุกตำแหน่งและแผนที่สถานี (ล้มเหลวแหล่งไหนก็ข้ามแหล่งนั้น)"""
+    out = {"tmd": [], "air": [], "tw": []}
+    for key, fn in (("tmd", lambda: fetch_tmd_stations(cfg)), ("air", fetch_air4thai), ("tw", fetch_thaiwater_rain24)):
         try:
             out[key] = fn()
         except Exception as e:

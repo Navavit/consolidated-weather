@@ -54,11 +54,17 @@
       <div class="cards" id="now"></div>
       <div class="radar-card">
         <div class="radar-head">
-          <h3>🛰️ เรดาร์ฝน <span id="radar-time" class="muted"></span></h3>
+          <h3>🗺️ แผนที่ฝน: เรดาร์ + สถานีวัด <span id="radar-time" class="muted"></span></h3>
           <button id="radar-play" class="ghost small" type="button" aria-label="เล่น/หยุดภาพเคลื่อนไหว">▶︎ ย้อนหลัง 2 ชม.</button>
         </div>
-        <div id="map" class="map" role="region" aria-label="แผนที่เรดาร์ฝนและตำแหน่ง"></div>
-        <p class="note">เรดาร์: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> (อัปเดตทุก 10 นาที) · สีฟ้าอ่อน = ฝนเบา → สีเข้ม/เหลือง = ฝนหนัก · แตะวงกลมเพื่อเลือกตำแหน่ง</p>
+        <div id="map" class="map" role="region" aria-label="แผนที่เรดาร์ฝน สถานีวัด และตำแหน่ง"></div>
+        <div class="map-tools">
+          <div class="chips map-layers" id="map-layers" role="group" aria-label="เลือกชั้นข้อมูลบนแผนที่"></div>
+          <div class="map-legend" id="map-legend" aria-label="คำอธิบายสี"></div>
+        </div>
+        <p class="note">เรดาร์: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> (ทุก 10 นาที) ·
+          จุดสี = ฝน 24 ชม. ล่าสุดที่สถานีวัดได้ (โทรมาตร ThaiWater ทุกหน่วยงาน, สถานีอุตุฯ กรมอุตุนิยมวิทยา) · PM2.5 จาก Air4Thai ·
+          วงแหวน = จุดตรวจที่ใช้เทียบความแม่นของโมเดล · แตะจุดเพื่อดูค่า · แตะวงกลมใหญ่เพื่อเลือกตำแหน่ง</p>
       </div>
     </section>
 
@@ -72,8 +78,10 @@
       <div class="cards" id="brief"></div>
     </section>
 
-    <section id="step-3" aria-labelledby="h-rain">
-      <h2 id="h-rain"><span class="step-no" aria-hidden="true">③</span> ฝนแยกโมเดล (มม.) <small>ช่วงเวลาเดียวกับ ② · เรียงจากละเอียดไปหยาบ</small></h2>
+    <details class="fold" id="step-3">
+      <summary><span class="step-no" aria-hidden="true">③</span> <b>แยกแหล่ง</b> <small>ฝนแยกโมเดล · โอกาสฝน ensemble · HII · พารามิเตอร์อื่น</small></summary>
+    <section aria-labelledby="h-rain">
+      <h2 id="h-rain">ฝนแยกโมเดล (มม.) <small>ช่วงเวลาเดียวกับ ② · เรียงจากละเอียดไปหยาบ</small></h2>
       <div class="table-wrap" id="rain-table"></div>
       <p class="note" id="rain-note"></p>
     </section>
@@ -94,10 +102,13 @@
       <label class="select"><span>พารามิเตอร์</span><select id="param"></select></label>
       <div class="table-wrap" id="param-table"></div>
     </section>
+    </details>
 
-    <section id="step-4" aria-labelledby="h-charts">
+    <details class="fold" id="step-4">
+      <summary><span class="step-no" aria-hidden="true">④</span> <b>รายชั่วโมง 7 วัน</b> <small>กราฟฝน อุณหภูมิ ความชื้น ลม PM2.5</small></summary>
+    <section aria-labelledby="h-charts">
       <div class="section-head">
-        <h2 id="h-charts"><span class="step-no" aria-hidden="true">④</span> รายชั่วโมง 7 วัน</h2>
+        <h2 id="h-charts">รายชั่วโมง 7 วัน</h2>
         <label class="select">
           <span>เส้นสีส้ม = โมเดล</span>
           <select id="highlight"></select>
@@ -105,9 +116,12 @@
       </div>
       <div class="charts" id="charts"></div>
     </section>
+    </details>
 
-    <section id="step-5" aria-labelledby="h-runs">
-      <h2 id="h-runs"><span class="step-no" aria-hidden="true">⑤</span> ที่มา: รอบรันของแต่ละโมเดล <small id="runs-sub">ข้อมูลในหน้านี้มาจากรอบไหน</small></h2>
+    <details class="fold" id="step-5">
+      <summary><span class="step-no" aria-hidden="true">⑤</span> <b>ที่มา + ความแม่น</b> <small>รอบรันของแต่ละโมเดล · 🏆 โมเดลไหนแม่น</small></summary>
+    <section aria-labelledby="h-runs">
+      <h2 id="h-runs">ที่มา: รอบรันของแต่ละโมเดล <small id="runs-sub">ข้อมูลในหน้านี้มาจากรอบไหน</small></h2>
       <div class="table-wrap" id="runs-table"></div>
       <p class="note">รอบรัน (init) = เวลาที่โมเดลเริ่มคำนวณ · <b>ยืนยันแล้ว</b> = อ่านจาก metadata ของ Open-Meteo · <b>ประมาณ</b> = คำนวณจากตารางรอบรันและเวลาที่ผลมักออก ·
         Google อัปเดตต่อเนื่อง ไม่มีรอบรัน</p>
@@ -219,6 +233,7 @@
           </tbody></table></div>
       </details>
     </section>
+    </details>
 
     <section id="about" aria-labelledby="h-about">
       <h2 id="h-about">ℹ️ เกี่ยวกับโครงการ</h2>
