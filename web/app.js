@@ -146,11 +146,14 @@ async function init() {
     $("v-note").textContent = "ยังไม่มีข้อมูล — ระบบเริ่มเก็บค่าวัดจากสถานีแล้ว ผลจะเริ่มแสดงในไม่กี่ชั่วโมง";
   });
   state.meta = await getJSON("data/meta.json").catch(() => null);
-  const saved = parseInt(store.get("loc") || "0", 10);
+  // ค่าเริ่มต้น = 📍 ตรงที่ฉันอยู่ · แสดงตำแหน่งแรกไปก่อนระหว่างรออนุญาตตำแหน่ง/คำนวณ (ถ้า GPS ใช้ไม่ได้ก็ค้างที่ตำแหน่งแรก)
+  const tab = store.get("tab") || "gps";
+  const saved = tab.startsWith("loc:") ? parseInt(tab.slice(4), 10) : 0;
   renderChips();
   initMap();
-  await selectLocation(saved < state.index.locations.length ? saved : 0);
+  await selectLocation(saved < state.index.locations.length ? saved : 0, false);
   if (wantAbout) showAbout(true);
+  else if (tab === "gps") selectGps(false);
   let t;
   window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(renderCharts, 150); });
 }
@@ -179,18 +182,19 @@ function applyTheme(theme) {
 }
 
 function renderChips() {
-  $("locations").replaceChildren(...state.index.locations.map((l, i) =>
-    el("button", { class: "chip", role: "tab", type: "button", "aria-selected": String(i === state.locIdx),
-      onclick: () => selectLocation(i) }, l.name)),
+  $("locations").replaceChildren(
     el("button", { class: "chip", id: "gps-chip", role: "tab", type: "button", "aria-selected": String(state.locIdx === -1),
-      onclick: selectGps }, "📍 ตรงที่ฉันอยู่"),
+      onclick: () => selectGps() }, "📍 ตรงที่ฉันอยู่"),
+    ...state.index.locations.map((l, i) =>
+      el("button", { class: "chip", role: "tab", type: "button", "data-idx": String(i), "aria-selected": String(i === state.locIdx),
+        onclick: () => selectLocation(i) }, l.name)),
     el("button", { class: "chip", id: "about-chip", role: "tab", type: "button", "aria-selected": "false",
       onclick: () => showAbout(true) }, "ℹ️ เกี่ยวกับโครงการ"));
 }
 function markChips() {
   const about = document.body.classList.contains("about-mode");
-  [...$("locations").children].forEach((c, j) => c.setAttribute("aria-selected", String(
-    c.id === "about-chip" ? about : !about && (c.id === "gps-chip" ? state.locIdx === -1 : j === state.locIdx))));
+  [...$("locations").children].forEach((c) => c.setAttribute("aria-selected", String(
+    c.id === "about-chip" ? about : !about && (c.id === "gps-chip" ? state.locIdx === -1 : Number(c.dataset.idx) === state.locIdx))));
   $("gps-note").hidden = about || state.locIdx !== -1;
 }
 
@@ -233,12 +237,12 @@ async function showAbout(on) {
     `เทียบกับค่าวัดจริงแล้ว ${n.toLocaleString("th-TH")} ครั้ง · ใช้งานอยู่ ${state.aboutLoc ? state.aboutLoc.models.length : "–"} โมเดล + ${M ? M.ensembles.length : "–"} ensemble`;
 }
 
-async function selectLocation(i) {
+async function selectLocation(i, remember = true) {
   document.body.classList.remove("about-mode");
   if (location.hash === "#about") history.replaceState(null, "", location.pathname);
   state.locIdx = i;
   state.gps = null;                         // เปลี่ยนแท็บ = กลับมาใช้ตำแหน่งของแท็บนั้น
-  store.set("loc", String(i));
+  if (remember) store.set("tab", `loc:${i}`);
   markChips();
   document.body.style.opacity = "0.6";      // คงหน้าเดิมไว้ระหว่างโหลด ไม่กระพริบ
   try {
@@ -459,9 +463,10 @@ async function buildLocalPayload(lat, lon) {
   };
 }
 
-async function selectGps() {
+async function selectGps(remember = true) {
   document.body.classList.remove("about-mode");
   if (location.hash === "#about") history.replaceState(null, "", location.pathname);
+  if (remember) store.set("tab", "gps");
   markChips();
   const chip = $("gps-chip");
   if (!navigator.geolocation) { chip.textContent = "📍 เบราว์เซอร์นี้ไม่รองรับ GPS"; return; }
