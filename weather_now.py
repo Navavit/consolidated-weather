@@ -103,8 +103,9 @@ def fetch_thaiwater_rain24():
         name = (st.get("tele_station_name") or {}).get("th") or ""
         amphoe = (geo.get("amphoe_name") or {}).get("th") or ""
         tumbon = (geo.get("tumbon_name") or {}).get("th") or ""
+        province = (geo.get("province_name") or {}).get("th") or ""
         out.append({"id": str(st.get("id")), "name": name.strip(), "area": f"ต.{tumbon} อ.{amphoe}".strip(),
-                    "agency": ((x.get("agency") or {}).get("agency_shortname") or {}).get("th", "").strip(),
+                    "agency": ((x.get("agency") or {}).get("agency_shortname") or {}).get("th", "").strip(), "province": province.strip(),
                     "lat": lat, "lon": lon, "time": pd.Timestamp(x.get("rainfall_datetime")).isoformat(),
                     "rain_24h": v})
     return out

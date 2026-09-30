@@ -135,14 +135,30 @@ def verification_points(archive, locations, tmd3h, thaiwater, cfg=None):
         if s and f"tmd:{s['id']}" not in pts:
             pts[f"tmd:{s['id']}"] = {"key": f"tmd:{s['id']}", "kind": "tmd", "id": s["id"], "name": f"สถานี{s['name']}",
                                      "lat": s["lat"], "lon": s["lon"], "for": name, "dist_km": s["dist_km"]}
-        # เครื่องวัดฝนหนาแน่น (เช่น กทม.): หลายจุดในรัศมีที่กำหนด แต่ละจุดห่างกัน ≥ min_spacing_km
+        # เครื่องวัดฝนหนาแน่น (เช่น กทม.): หลายจุด แต่ละจุดห่างกัน ≥ min_spacing_km
+        #   provinces + min_density = ทุกเครื่องในเขตเมือง (WorldPop ≥ min_density คน/ตร.กม.) ของจังหวัดที่ระบุ
+        #   ไม่ระบุ = ในรัศมี radius_km จากตำแหน่ง
         dense = (cfg.get("dense_gauges") or {}).get(name)
+        provs = set(dense.get("provinces") or []) if dense else set()
+        min_dens = float(dense.get("min_density", 0)) if dense else 0.0
+        dens = gauges_density() if provs or min_dens else {}
+
+        def eligible(g):
+            if provs and g.get("province") not in provs:
+                return False
+            return not min_dens or (dens.get(str(g["id"])) or 0) >= min_dens
+        if provs or min_dens:                  # จุดเดิมที่ยังรายงานอยู่แต่ไม่เข้าเกณฑ์ใหม่ = เลิกใช้ (ประวัติคะแนนยังอยู่)
+            for g in thaiwater:
+                k = f"tw:{g['id']}"
+                if k in pts and pts[k].get("for") == name and not eligible(g):
+                    del pts[k]
         n_want = int(dense["n"]) if dense else per_loc
         radius = float(dense.get("radius_km", GAUGE_MAX_KM)) if dense else GAUGE_MAX_KM
         spacing = float(dense.get("min_spacing_km", 2.0)) if dense else 0.0
         chosen = [p for p in pts.values() if p["kind"] == "tw" and p.get("for") == name and p.get("active", True)]
         near = []
-        for g in sorted((g for g in thaiwater if weather_now.distance_km(lat, lon, g["lat"], g["lon"]) <= radius),
+        for g in sorted((g for g in thaiwater if (eligible(g) if provs or min_dens
+                                                   else weather_now.distance_km(lat, lon, g["lat"], g["lon"]) <= radius)),
                         key=lambda g: weather_now.distance_km(lat, lon, g["lat"], g["lon"])):
             if len(chosen) + len(near) >= n_want:
                 break
@@ -162,6 +178,11 @@ def verification_points(archive, locations, tmd3h, thaiwater, cfg=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(list(pts.values()), ensure_ascii=False, indent=1), encoding="utf-8")
     return list(pts.values())
+
+
+def gauges_density():
+    import weather_gauges
+    return weather_gauges.density_table()
 
 
 def collect_points(points, archive, cfg=None, google_for=None):
