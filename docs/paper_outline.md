@@ -27,7 +27,9 @@
   Consistency with GSOD: 3-hourly max/min lie 1.1/1.0 °C inside GSOD Tmax/Tmin (expected from 3-h sampling).
   Sub-daily rainfall in ISD for Thailand is not usable (mixed 1–24 h periods, mostly reported only when rain occurs; 06/12 UTC "24-h" values repeat the 00 UTC total; a 6-h reconstruction reproduces GSOD with r = 0.72 only) → sub-daily rain is verified prospectively (TMD 3-hourly at all stations, ThaiWater hourly gauges, from Sep 2026).
 - **Climatology** GSOD 2000–2023 (⟨834,943⟩ station-days): monthly rain means, ±7-day smoothed day-of-year Tmax/Tmin.
-- **Prospective** (Sep 2026 →): TMD 3-hourly synoptic obs, ThaiWater telemetry gauges (20 inner-Bangkok gauges ≥ 2 km apart; Ayutthaya), citizen reports.
+- **Prospective** (Sep 2026 →): TMD 3-hourly synoptic obs at all ~124 stations; ThaiWater daily rain at ~3,200 gauges (all agencies) and hourly rain at
+  ~26 urban check gauges (WorldPop ≥ 1,500 km⁻² in Bangkok + 5 surrounding provinces, ≥ 2 km apart; inactive gauges replaced automatically); citizen reports.
+  Forecasts at check gauges archived every run with model initialisation times (TMD WRF 2 km, Google, 10 global models, 7 ensembles).
   Includes the national HII WRF-ROMS (3 km, 12 UTC run, 12–12 UTC daily rain classes read from published maps) verified on its own 12–12 UTC window.
 
 ### 2.2 Urbanisation
