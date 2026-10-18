@@ -1,0 +1,5 @@
+# สำหรับฐานข้อมูล (python -m wxdb) — ดู docs/DATABASE.md
+pyarrow>=15
+duckdb>=1.0
+eccodes>=2.37      # อ่าน GRIB (wheel มี ecCodes ในตัว)
+ecmwf-opendata>=0.3

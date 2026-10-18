@@ -1,0 +1,103 @@
+# ฐานข้อมูลระยะยาว (wxdb) — โครงสร้างและวิธีใช้: docs/DATABASE.md
+#
+#   ทุกวัน 2 รอบ (09:20 และ 21:20 UTC)
+#     grid  ดึงพยากรณ์กริด th025 ของ ECMWF IFS / AIFS และ NOAA GFS รอบ 00/12 UTC ที่ยังขาด (ย้อนได้ 3 วัน)
+#     etl   แปลงคลังรายชั่วโมง (branch data) ของวันที่ยังไม่ได้แปลงใน 7 วันล่าสุด (ถึง 2 วันก่อน) เป็น Parquet
+#   วันที่ 3 ของทุกเดือน 02:40 UTC
+#     pack  รวมไฟล์รายวันของเดือนก่อนเป็นไฟล์รายเดือน
+#     prune ลบ runs/ ที่เก่ากว่า 35 วันและอยู่ในฐานข้อมูลแล้วออกจาก branch data (commit ปกติ)
+#
+# ทุกขั้นใช้บริการที่ไม่มีค่าใช้จ่าย: GitHub Actions (repository สาธารณะ), GitHub Releases, ECMWF Open Data, NOAA NOMADS
+name: ฐานข้อมูล
+
+on:
+  schedule:
+    - cron: "20 9,21 * * *"
+    - cron: "40 2 3 * *"
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "งานที่ต้องการรัน"
+        type: choice
+        options: [daily, grid, etl, pack, prune, catalog]
+        default: daily
+      args:
+        description: "อาร์กิวเมนต์เพิ่มเติม เช่น --month 2026-10 หรือ --from 2026-10-01 --to 2026-10-05"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wxdb                     # งานฐานข้อมูลรันทีละงาน (แก้ manifest ร่วมกัน)
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  WXDB_TASK: ${{ github.event_name == 'schedule' && (github.event.schedule == '40 2 3 * *' && 'monthly' || 'daily') || inputs.task }}
+
+jobs:
+  daily:
+    if: contains(fromJSON('["daily","grid","etl","catalog"]'), github.event_name == 'schedule' && (github.event.schedule == '40 2 3 * *' && 'monthly' || 'daily') || inputs.task)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-db.txt
+
+      - name: ตารางมิติคงที่
+        if: env.WXDB_TASK == 'catalog'
+        run: python -m wxdb catalog
+
+      - name: พยากรณ์กริด
+        if: env.WXDB_TASK == 'daily' || env.WXDB_TASK == 'grid'
+        run: python -m wxdb grid ${{ env.WXDB_TASK == 'grid' && inputs.args || '' }}
+
+      - name: เตรียม branch data
+        if: env.WXDB_TASK == 'daily' || env.WXDB_TASK == 'etl'
+        run: |
+          git fetch --depth=1 origin data
+          git worktree add --detach archive FETCH_HEAD
+
+      - name: แปลงคลังรายชั่วโมงเข้าฐานข้อมูล
+        if: env.WXDB_TASK == 'daily' || env.WXDB_TASK == 'etl'
+        run: python -m wxdb etl --archive archive ${{ env.WXDB_TASK == 'etl' && inputs.args || '' }}
+
+      - name: สรุปสถานะ
+        if: always()
+        run: python -m wxdb status >> "$GITHUB_STEP_SUMMARY" || true
+
+  monthly:
+    if: contains(fromJSON('["monthly","pack","prune"]'), github.event_name == 'schedule' && (github.event.schedule == '40 2 3 * *' && 'monthly' || 'daily') || inputs.task)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    concurrency:
+      group: data-branch          # ไม่ให้ชนกับการเขียน branch data ของ collect.yml
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-db.txt
+
+      - name: รวมไฟล์รายเดือน
+        if: env.WXDB_TASK == 'monthly' || env.WXDB_TASK == 'pack'
+        run: python -m wxdb pack ${{ env.WXDB_TASK == 'pack' && inputs.args || '' }}
+
+      - name: ลดขนาด branch data
+        if: env.WXDB_TASK == 'monthly' || env.WXDB_TASK == 'prune'
+        run: |
+          scripts/data_worktree.sh
+          python -m wxdb prune --archive archive ${{ env.WXDB_TASK == 'prune' && inputs.args || '' }}
+          scripts/push_data.sh prune
+
+      - name: สรุปสถานะ
+        if: always()
+        run: python -m wxdb status >> "$GITHUB_STEP_SUMMARY" || true
