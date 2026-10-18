@@ -35,6 +35,12 @@ def cmd_run(args):
             weather_verify.update(args.export_dir, core.resolve_locations(), site_dir=getattr(args, "site_dir", None))
         except Exception as e:
             print(f"⚠️ verification: {e}")
+        # พยากรณ์ภัยความร้อนรายเขต กทม. (HEAT-SAFE): ดึงใหม่ทุก ~3 ชม. และคัดลอกผลล่าสุดขึ้นหน้าเว็บทุกรอบ
+        import weather_heatsafe
+        try:
+            weather_heatsafe.update(args.export_dir, site_dir=getattr(args, "site_dir", None))
+        except Exception as e:
+            print(f"⚠️ HEAT-SAFE: {e}")
     print(pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"))
     print(log.to_string(index=False))
     return 0 if (log.status == "ok").all() else 1

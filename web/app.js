@@ -136,6 +136,7 @@ async function init() {
   }
   $("updated").textContent = `อัปเดต ${timeAgo(state.index.generated)} · ${new Date(state.index.generated).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}`;
   const wantAbout = location.hash === "#about";
+  const wantHeat = location.hash === "#heat";
   initFolds();     // อ่านก่อน เพราะการเลือกตำแหน่งจะล้าง hash
   initRainBar();
   getJSON("data/verification.json").then((v) => {
@@ -153,6 +154,7 @@ async function init() {
   initMap();
   await selectLocation(saved < state.index.locations.length ? saved : 0, false);
   if (wantAbout) showAbout(true);
+  else if (wantHeat || tab === "heat") showHeat(true);
   else if (tab === "gps") selectGps(false);
   let t;
   window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(renderCharts, 150); });
@@ -188,20 +190,26 @@ function renderChips() {
     ...state.index.locations.map((l, i) =>
       el("button", { class: "chip", role: "tab", type: "button", "data-idx": String(i), "aria-selected": String(i === state.locIdx),
         onclick: () => selectLocation(i) }, l.name)),
+    el("button", { class: "chip", id: "heat-chip", role: "tab", type: "button", "aria-selected": "false",
+      onclick: () => showHeat(true) }, "🌡️ ภัยความร้อนรายเขต"),
     el("button", { class: "chip", id: "about-chip", role: "tab", type: "button", "aria-selected": "false",
       onclick: () => showAbout(true) }, "ℹ️ เกี่ยวกับโครงการ"));
 }
 function markChips() {
   const about = document.body.classList.contains("about-mode");
+  const heat = document.body.classList.contains("heat-mode");
+  const other = about || heat;
   [...$("locations").children].forEach((c) => c.setAttribute("aria-selected", String(
-    c.id === "about-chip" ? about : !about && (c.id === "gps-chip" ? state.locIdx === -1 : Number(c.dataset.idx) === state.locIdx))));
-  $("gps-note").hidden = about || state.locIdx !== -1;
+    c.id === "about-chip" ? about : c.id === "heat-chip" ? heat
+      : !other && (c.id === "gps-chip" ? state.locIdx === -1 : Number(c.dataset.idx) === state.locIdx))));
+  $("gps-note").hidden = other || state.locIdx !== -1;
 }
 
 // ---------------------------------------------------------------------------
 // ℹ️ เกี่ยวกับโครงการ (แท็บสุดท้าย · ลิงก์ตรงด้วย #about)
 // ---------------------------------------------------------------------------
 async function showAbout(on) {
+  if (on) document.body.classList.remove("heat-mode");
   document.body.classList.toggle("about-mode", on);
   if (on && location.hash !== "#about") history.replaceState(null, "", "#about");
   if (!on && location.hash === "#about") history.replaceState(null, "", location.pathname);
@@ -238,7 +246,7 @@ async function showAbout(on) {
 }
 
 async function selectLocation(i, remember = true) {
-  document.body.classList.remove("about-mode");
+  document.body.classList.remove("about-mode", "heat-mode");
   if (location.hash === "#about") history.replaceState(null, "", location.pathname);
   state.locIdx = i;
   state.gps = null;                         // เปลี่ยนแท็บ = กลับมาใช้ตำแหน่งของแท็บนั้น
@@ -464,7 +472,7 @@ async function buildLocalPayload(lat, lon) {
 }
 
 async function selectGps(remember = true) {
-  document.body.classList.remove("about-mode");
+  document.body.classList.remove("about-mode", "heat-mode");
   if (location.hash === "#about") history.replaceState(null, "", location.pathname);
   if (remember) store.set("tab", "gps");
   markChips();
@@ -1377,3 +1385,152 @@ style.textContent = Object.entries({ good: "--good", warning: "--warning", serio
 document.head.append(style);
 
 init();
+
+
+// ---------------------------------------------------------------------------
+// 🌡️ พยากรณ์ภัยความร้อนรายเขต กรุงเทพมหานคร (HEAT-SAFE) · ลิงก์ตรงด้วย #heat
+// ข้อมูล: data/heatsafe.json (weather_heatsafe.py) · ขอบเขตเขต: bkk_districts.geojson
+// ---------------------------------------------------------------------------
+const HS_COLORS = ["#d9d9d9", "#43A047", "#FDD835", "#FB8C00", "#D32F2F"];      // ต่ำกว่าเกณฑ์ · เขียว · เหลือง · ส้ม · แดง (เกณฑ์ กทม.)
+const HS_NAMES = ["ต่ำกว่าเกณฑ์เฝ้าระวัง", "เขียว · เฝ้าระวัง", "เหลือง · เตือนภัย", "ส้ม · อันตราย", "แดง · อันตรายมาก"];
+const HS_METRICS = {
+  lvl: { label: "ระดับเตือนภัย (HI ปรับแก้)", value: (d) => d.lvl },
+  p_orange: { label: "ความน่าจะเป็น ≥ ระดับส้ม", value: (d) => d.p_orange },
+  rain: { label: "ความน่าจะเป็นฝน", value: (d) => d.p_rain },
+};
+const hs = { data: null, geo: null, day: 0, metric: "lvl", sel: null, map: null, layer: null };
+const hsLevel = (v) => (v == null ? null : v >= 52 ? 4 : v >= 42 ? 3 : v >= 33 ? 2 : v >= 27 ? 1 : 0);
+const hsPctColor = (p, base) => (p == null ? "#d9d9d9" : p >= 70 ? base[3] : p >= 40 ? base[2] : p >= 10 ? base[1] : base[0]);
+const HS_P_ORANGE = ["#fff3e0", "#ffcc80", "#fb8c00", "#bf360c"];
+const HS_P_RAIN = ["#e3f2fd", "#90caf9", "#1e88e5", "#0d47a1"];
+
+async function showHeat(on) {
+  document.body.classList.remove("about-mode");
+  document.body.classList.toggle("heat-mode", on);
+  if (on) { history.replaceState(null, "", "#heat"); store.set("tab", "heat"); }
+  markChips();
+  if (!on) return;
+  window.scrollTo({ top: 0 });
+  try {
+    if (!hs.data) [hs.data, hs.geo] = await Promise.all([getJSON("data/heatsafe.json"), getJSON("bkk_districts.geojson")]);
+  } catch (e) {
+    $("hs-updated").textContent = "ยังไม่มีผลพยากรณ์ — ระบบจะสร้างในรอบการประมวลผลถัดไป";
+    return;
+  }
+  const D = hs.data;
+  const days = D.districts[0].days;
+  if (hs.day >= days.length) hs.day = 0;
+  $("hs-updated").textContent = `ประมวลผล ${new Date(D.generated).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })} ` +
+    `· ${D.districts.length} เขต · ${D.models.length} แบบจำลอง (${D.models.join(", ")}) · ปรับปรุงทุกประมาณ 3 ชั่วโมง`;
+  const dayLabel = (d) => `${d.lead_day === 0 ? "วันนี้" : `+${d.lead_day} วัน`} · ${new Date(d.date).toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short" })}`;
+  $("hs-days").replaceChildren(...days.map((d, i) => el("button", { class: "chip", role: "tab", type: "button",
+    "aria-selected": String(i === hs.day), onclick: () => { hs.day = i; renderHeat(); } }, dayLabel(d))));
+  $("hs-metric").replaceChildren(...Object.entries(HS_METRICS).map(([k, m]) => el("button", { class: "chip", role: "tab", type: "button",
+    "aria-selected": String(k === hs.metric), onclick: () => { hs.metric = k; renderHeat(); } }, m.label)));
+  renderHeatMethod();
+  if (!hs.map && typeof L !== "undefined") {
+    hs.map = L.map("hs-map", { scrollWheelZoom: false, zoomSnap: 0.25 });
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 16, opacity: 0.55 }).addTo(hs.map);
+    $("hs-map").classList.toggle("dark-tiles", isDark());
+  }
+  renderHeat();
+  requestAnimationFrame(() => hs.map && hs.map.invalidateSize());
+}
+
+function hsColor(d) {
+  if (!d) return "#d9d9d9";
+  if (hs.metric === "lvl") return d.lvl == null ? "#d9d9d9" : HS_COLORS[d.lvl];
+  if (hs.metric === "p_orange") return hsPctColor(d.p_orange, HS_P_ORANGE);
+  return hsPctColor(d.p_rain, HS_P_RAIN);
+}
+
+function renderHeat() {
+  const D = hs.data;
+  [...$("hs-days").children].forEach((c, i) => c.setAttribute("aria-selected", String(i === hs.day)));
+  [...$("hs-metric").children].forEach((c) => c.setAttribute("aria-selected", String(c.textContent === HS_METRICS[hs.metric].label)));
+  const byCode = Object.fromEntries(D.districts.map((x) => [x.dcode, x]));
+  if (hs.map) {
+    if (hs.layer) hs.layer.remove();
+    hs.layer = L.geoJSON(hs.geo, {
+      style: (f) => ({ color: "#ffffff", weight: 1, fillOpacity: 0.82, fillColor: hsColor(byCode[f.properties.dcode]?.days[hs.day]) }),
+      onEachFeature: (f, ly) => {
+        const x = byCode[f.properties.dcode], d = x?.days[hs.day];
+        ly.bindTooltip(`<b>${f.properties.dname}</b><br>HI สูงสุด ${fmt(d?.hi)} °C (${fmt(d?.hi_lo)}–${fmt(d?.hi_hi)})<br>` +
+          `≥ ส้ม ${d?.p_orange ?? "–"}% · ฝน ${d?.p_rain ?? "–"}%`, { sticky: true, className: "map-label" });
+        ly.on("click", () => { hs.sel = f.properties.dcode; renderHeatDetail(); });
+      },
+    }).addTo(hs.map);
+    if (!hs.fitted) { hs.map.fitBounds(hs.layer.getBounds(), { padding: [6, 6] }); hs.fitted = true; }
+  }
+  const legend = hs.metric === "lvl"
+    ? HS_NAMES.map((n, i) => [HS_COLORS[i], n])
+    : (hs.metric === "p_orange" ? HS_P_ORANGE : HS_P_RAIN).map((c, i) => [c, ["< 10%", "10–39%", "40–69%", "≥ 70%"][i]]);
+  $("hs-legend").replaceChildren(...legend.map(([c, n]) => el("span", { class: "lg" },
+    el("i", { style: `display:inline-block;width:14px;height:14px;border-radius:3px;background:${c}` }), n)));
+  // ตาราง: ทุกเขต × ทุกวัน (เรียงตาม HI ของวันที่เลือก)
+  const days = D.districts[0].days;
+  const rows = [...D.districts].sort((a, b) => (b.days[hs.day]?.hi ?? -99) - (a.days[hs.day]?.hi ?? -99));
+  $("hs-table").replaceChildren(el("table", { class: "hs-table" },
+    el("thead", {}, el("tr", {}, el("th", {}, "เขต"), ...days.map((d, i) => el("th", { class: i === hs.day ? "sel" : null },
+      d.lead_day === 0 ? "วันนี้" : `+${d.lead_day}`, el("span", { class: "wsub" }, new Date(d.date).toLocaleDateString("th-TH", { day: "numeric", month: "short" })))))),
+    el("tbody", {}, rows.map((x) => el("tr", {},
+      el("td", {}, el("a", { onclick: () => { hs.sel = x.dcode; renderHeatDetail(); $("hs-detail").scrollIntoView({ block: "nearest" }); } }, x.dname)),
+      ...x.days.map((d) => {
+        const c = d.lvl == null ? "#d9d9d9" : HS_COLORS[d.lvl];
+        return el("td", { class: "lv", style: `background:${c};color:${inkOn(c)}` }, fmt(d.hi), el("small", {}, `ส้ม ${d.p_orange ?? "–"}%`));
+      }))))));
+  if (!hs.sel) hs.sel = rows[0].dcode;
+  renderHeatDetail();
+}
+
+function renderHeatDetail() {
+  const x = hs.data.districts.find((d) => d.dcode === hs.sel);
+  if (!x) return;
+  const lvlTag = (v) => { const l = hsLevel(v); const c = l == null ? "#d9d9d9" : HS_COLORS[l];
+    return el("span", { class: "hs-lvl", style: `background:${c};color:${inkOn(c)}` }, fmt(v)); };
+  $("hs-detail").replaceChildren(
+    el("h4", {}, `เขต${x.dname}`, el("span", { class: "muted", style: "font-weight:400;font-size:12px" }, `  ${x.dname_en}`)),
+    el("table", {},
+      el("thead", {}, el("tr", {}, ...["วัน", "HI สูงสุด °C", "ช่วงของแบบจำลอง", "P(≥ส้ม)", "Tmax/Tmin", "ฝน มม. (P)"].map((h) => el("th", {}, h)))),
+      el("tbody", {}, x.days.map((d) => el("tr", {},
+        el("td", {}, d.lead_day === 0 ? "วันนี้" : `+${d.lead_day}`),
+        el("td", {}, lvlTag(d.hi)),
+        el("td", {}, `${fmt(d.hi_lo)}–${fmt(d.hi_hi)}`),
+        el("td", {}, d.p_orange == null ? "–" : `${d.p_orange}%`),
+        el("td", {}, `${fmt(d.tmax)}/${fmt(d.tmin)}`),
+        el("td", {}, `${fmt(d.rain)} (${d.p_rain ?? "–"}%)`))))),
+    el("p", { class: "note" }, "HI สูงสุด = มัธยฐานของแบบจำลองหลังปรับแก้ความเอนเอียง · ช่วง = ค่าต่ำสุด–สูงสุดระหว่างแบบจำลอง · " +
+      "P(≥ส้ม) = สัดส่วนของแบบจำลองที่ HI สูงสุดถึง 42 °C · P ฝน = สัดส่วนของแบบจำลองที่ฝนรายวัน ≥ " + `${hs.data.rain_threshold_mm} มม.`));
+}
+
+function renderHeatMethod() {
+  const C = hs.data.calibration || {};
+  const leads = ["24 ชม.", "72 ชม.", "168 ชม."];
+  const cell = (o, k, d = 2) => (o && o[k] != null ? Number(o[k]).toFixed(d) : "–");
+  const skill = el("table", {},
+    el("thead", {}, el("tr", {}, ...["ระยะล่วงหน้า", "อุณหภูมิ MAE / RMSE (°C)", "HI วันร้อนจัด MAE / RMSE (°C)", "ความเอนเอียง HI (°C)",
+      "ระดับส้ม POD / FAR", "Brier skill score"].map((h) => el("th", {}, h)))),
+    el("tbody", {}, leads.map((l) => el("tr", {}, el("td", {}, l),
+      el("td", {}, `${cell(C.skill_multimodel?.[l], "temp_MAE")} / ${cell(C.skill_multimodel?.[l], "temp_RMSE")}`),
+      el("td", {}, `${cell(C.skill_hi_hotdays?.[l], "MAE")} / ${cell(C.skill_hi_hotdays?.[l], "RMSE")}`),
+      el("td", {}, cell(C.skill_hi_hotdays?.[l], "bias")),
+      el("td", {}, `${cell(C.alert_orange?.[l], "POD")} / ${cell(C.alert_orange?.[l], "FAR")}`),
+      el("td", {}, C.brier_skill?.[l] != null ? Number(C.brier_skill[l]).toFixed(2) : "–")))));
+  $("hs-method").replaceChildren(
+    el("p", {}, "ดัชนีความร้อน (Heat Index; HI) คำนวณรายชั่วโมงจากอุณหภูมิอากาศและความชื้นสัมพัทธ์ที่ระดับ 2 เมตร ด้วยสมการของ " +
+      "National Weather Service (Rothfusz, 1990) ณ จุดตัวแทนของแต่ละเขต แล้วหาค่าสูงสุดรายวันของแต่ละแบบจำลอง " +
+      "ค่าดังกล่าวปรับแก้ความเอนเอียงเชิงระบบ (bias correction) ต่อแบบจำลองต่อระยะล่วงหน้า โดยใช้ผลการทดสอบย้อนหลังกับค่าตรวจวัดของสถานีในกรุงเทพมหานคร " +
+      `(${C.period || "–"}; ${(C.stations || []).length} สถานี) จากนั้นจัดระดับตามเกณฑ์แจ้งเตือนภัยความร้อนของกรุงเทพมหานคร ` +
+      "ซึ่งสอดคล้องกับเกณฑ์ของกรมอนามัย (เขียว 27.0–32.9, เหลือง 33.0–41.9, ส้ม 42.0–51.9, แดง ≥ 52.0 °C)"),
+    el("p", {}, "ความน่าจะเป็นที่ค่าจะเกินเกณฑ์ประมาณจากกลุ่มแบบจำลองหลายระบบ (multi-model ensemble) คือสัดส่วนของแบบจำลองที่พยากรณ์ค่าถึงเกณฑ์ " +
+      "ผลการทดสอบย้อนหลังในฤดูร้อนของค่าเฉลี่ยหลายแบบจำลองแสดงไว้ด้านล่าง (MAE = ค่าคลาดเคลื่อนสัมบูรณ์เฉลี่ย; RMSE = รากที่สองของค่าคลาดเคลื่อนกำลังสองเฉลี่ย; " +
+      "POD = สัดส่วนเหตุการณ์ที่พยากรณ์ได้; FAR = สัดส่วนการเตือนที่ไม่เกิดเหตุการณ์จริง)"),
+    skill,
+    el("ul", {},
+      el("li", {}, "แบบจำลองระดับโลกมีขนาดกริด 9–55 กม. จึงจำแนกความแตกต่างระหว่างเขตใกล้เคียงได้จำกัด ความแตกต่างระดับชุมชนควรพิจารณาร่วมกับค่าตรวจวัดในพื้นที่และข้อมูลดาวเทียม"),
+      el("li", {}, "แม้ปรับแก้ความเอนเอียงแล้ว การพยากรณ์ยังมีแนวโน้มประเมินความน่าจะเป็นของวันร้อนจัดต่ำกว่าความเป็นจริง และความน่าจะเป็นที่ระยะ 7 วันมีทักษะต่ำ"),
+      el("li", {}, `ไม่รวมแบบจำลองที่ยังไม่มีผลการทดสอบย้อนหลัง: ${(hs.data.models_excluded || []).join(", ") || "–"}`),
+      el("li", {}, `แหล่งค่าปรับแก้: ${C.source || "–"} · ปรับปรุงค่าปรับแก้ ${C.generated ? new Date(C.generated).toLocaleDateString("th-TH") : "–"}`),
+      el("li", {}, "ผลพยากรณ์นี้เป็นผลจากแบบจำลองเชิงตัวเลข มิใช่ประกาศเตือนภัยอย่างเป็นทางการ")));
+}

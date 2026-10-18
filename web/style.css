@@ -296,3 +296,33 @@ body.about-mode main > details.fold { display: none; }
 .map-legend .lg i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 1px rgba(0,0,0,.2); }
 .pop { font-size: 13px; line-height: 1.5; min-width: 180px; }
 main > details.fold:last-of-type { margin-bottom: 28px; }
+
+/* พยากรณ์ภัยความร้อนรายเขต (HEAT-SAFE): แสดงแทนส่วนพยากรณ์เมื่อเลือกแท็บ 🌡️ */
+#heatsafe { display: none; }
+body.heat-mode #heatsafe { display: block; }
+body.heat-mode main > section:not(#heatsafe), body.heat-mode main > details.fold, body.heat-mode #gps-note,
+body.heat-mode #edit-loc, body.heat-mode .steps, body.heat-mode .timebase { display: none; }
+#heatsafe h3 { font-size: 16px; margin: 22px 0 8px; }
+#heatsafe h3 small, #heatsafe h2 small { font-weight: 400; color: var(--muted); font-size: 13px; }
+.hs-guide { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; margin: 8px 0 12px; }
+.hs-guide > div { background: var(--surface); border-radius: 10px; box-shadow: 0 0 0 1px var(--ring); padding: 8px 12px; font-size: 13.5px; color: var(--ink-2); }
+.hs-guide b { color: var(--ink); }
+#hs-days, #hs-metric { margin: 6px 0; }
+.hs-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: 12px; margin-top: 6px; }
+@media (max-width: 760px) { .hs-grid { grid-template-columns: 1fr; } }
+#hs-map { height: 460px; }
+.hs-detail { background: var(--surface); border-radius: 12px; box-shadow: 0 0 0 1px var(--ring); padding: 12px 14px; font-size: 14px; }
+.hs-detail h4 { margin: 0 0 6px; font-size: 16px; }
+.hs-detail table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.hs-detail td, .hs-detail th { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--grid); }
+.hs-detail td:first-child, .hs-detail th:first-child { text-align: left; }
+.hs-lvl { display: inline-block; min-width: 46px; text-align: center; border-radius: 6px; padding: 1px 6px; font-weight: 600; }
+.hs-table td.lv { text-align: center; font-variant-numeric: tabular-nums; }
+.hs-table td.lv small { display: block; font-weight: 400; font-size: 11px; opacity: .85; }
+.hs-table a { color: inherit; cursor: pointer; text-decoration: underline dotted; }
+.hs-method { margin-top: 16px; border-radius: 12px; box-shadow: 0 0 0 1px var(--ring); background: var(--surface); padding: 10px 14px; }
+.hs-method summary { cursor: pointer; font-weight: 600; }
+.hs-method p, .hs-method li { color: var(--ink-2); font-size: 14px; }
+.hs-method table { border-collapse: collapse; font-size: 13px; margin: 6px 0; }
+.hs-method td, .hs-method th { border-bottom: 1px solid var(--grid); padding: 3px 8px; text-align: right; }
+.hs-method td:first-child, .hs-method th:first-child { text-align: left; }
