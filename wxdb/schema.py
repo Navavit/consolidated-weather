@@ -52,7 +52,7 @@ TABLES = {
         "kind": "dim", "desc": "จุดตรวจวัดหรือจุดพยากรณ์: สถานีอุตุนิยมวิทยา โทรมาตร จุดผู้ใช้ และจุดตัวแทนเขต",
         "pk": ["site_id"], "fk": {"source_id": "source.source_id", "cell_id": "grid_cell.cell_id"},
         "cols": [("site_id", pa.string(), "รหัสจุด <เครือข่าย>:<รหัสเดิม> เช่น tmd:48455, tw:1, bkkdist:1001"),
-                 ("network", pa.string(), "เครือข่าย: tmd | tw | air4thai | isd | user | bkkdist | prov | loc"),
+                 ("network", pa.string(), "เครือข่าย: tmd | tw | air4thai | ghcnh | user | bkkdist | prov | loc"),
                  ("native_id", pa.string(), "รหัสจุดของหน่วยงานต้นทาง"),
                  ("name", pa.string(), "ชื่อจุด"),
                  ("province", pa.string(), "จังหวัด"),
@@ -131,7 +131,7 @@ TABLES = {
                  ("precip", pa.float32(), "ฝนรวมรายวัน (มม.)")]},
     "observation": {
         "kind": "fact", "desc": "ค่าตรวจวัดจากสถานีและรายงานของผู้ใช้",
-        "pk": ["site_id", "time", "var_id", "period_h"],
+        "pk": ["site_id", "time", "var_id", "period_h", "source_id"],
         "fk": {"site_id": "site.site_id", "var_id": "variable.var_id", "source_id": "source.source_id"},
         "cols": [("site_id", pa.string(), "จุดตรวจวัด"),
                  ("time", TS, "เวลาตรวจวัด (UTC; สิ้นสุดช่วงสะสม)"),
@@ -170,11 +170,26 @@ TABLES = {
                  ("ob", pa.float32(), "ค่าตรวจวัด"),
                  ("ev_fc", pa.bool_(), "พยากรณ์ว่าเกิดเหตุการณ์ (ฝน ≥ เกณฑ์)"),
                  ("ev_ob", pa.bool_(), "เกิดเหตุการณ์จริง")]},
+    "reanalysis_daily": {
+        "kind": "fact", "desc": "ข้อมูลย้อนหลังเชิงกริดรายวัน (วัน UTC) ณ จุดศูนย์กลางเซลล์ th025: ERA5-Land และ CHIRPS ตั้งแต่ปี 2016",
+        "pk": ["dataset_id", "cell_id", "date"],
+        "fk": {"dataset_id": "source.source_id", "cell_id": "grid_cell.cell_id"},
+        "cols": [("dataset_id", pa.string(), "ชุดข้อมูล: era5_land | chirps"),
+                 ("cell_id", pa.int32(), "เซลล์กริด th025"),
+                 ("date", pa.date32(), "วันที่ (UTC 00–24)"),
+                 ("t2m_mean", pa.float32(), "อุณหภูมิเฉลี่ยรายวัน (°C)"),
+                 ("t2m_max", pa.float32(), "อุณหภูมิสูงสุด (°C)"),
+                 ("t2m_min", pa.float32(), "อุณหภูมิต่ำสุด (°C)"),
+                 ("td2m_mean", pa.float32(), "จุดน้ำค้างเฉลี่ย (°C)"),
+                 ("precip", pa.float32(), "ฝนรวมรายวัน (มม.)"),
+                 ("ssrd", pa.float32(), "รังสีคลื่นสั้นขาลงรวมรายวัน (MJ/m²)"),
+                 ("channel", pa.string(), "ช่องทางที่ดึง: gee | openmeteo | chc")]},
 }
 
 # ตารางข้อเท็จจริงแต่ละตาราง: คอลัมน์เวลาที่ใช้แบ่งไฟล์รายเดือน
 PARTITION_TIME = {"forecast_grid": "init_time", "forecast_point": "init_time", "forecast_district": "issued",
-                  "observation": "time", "forecast_hii": "init_time", "verification_pair": "valid_time"}
+                  "observation": "time", "forecast_hii": "init_time", "verification_pair": "valid_time",
+                  "reanalysis_daily": "date"}
 
 
 def arrow_schema(table):

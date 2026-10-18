@@ -4,12 +4,12 @@
 
 | หัวข้อ | รายละเอียด |
 |---|---|
-| ขอบเขตเชิงพื้นที่ | ประเทศไทย: กริด th025 (0.25°, 957 เซลล์ ซึ่ง 694 เซลล์อยู่ในประเทศ) และจุดสถานี (สถานีอุตุนิยมวิทยา ~122 แห่ง, โทรมาตร ~4,300 เครื่อง) |
-| ขอบเขตเชิงเวลา | ค่าตรวจวัดและพยากรณ์ ณ จุด ตั้งแต่ 27 ก.ย. 2569 · พยากรณ์กริดตั้งแต่ 18 ต.ค. 2569 · ปรับปรุงอัตโนมัติทุกวัน |
+| ขอบเขตเชิงพื้นที่ | ประเทศไทย: กริด th025 (0.25°, 957 เซลล์ ซึ่ง 694 เซลล์อยู่ในประเทศ), สถานีอุตุนิยมวิทยา ~128 แห่ง (GHCNh ~160), โทรมาตร ~4,300 เครื่อง, สถานีคุณภาพอากาศ 173 แห่ง, จุดตัวแทน 77 จังหวัดและ 50 เขตของกรุงเทพมหานคร |
+| ขอบเขตเชิงเวลา | ค่าตรวจวัดรายชั่วโมง (GHCNh) และ ERA5-Land/CHIRPS รายวัน ตั้งแต่ 1 ม.ค. 2016 · ค่าตรวจวัดของหน่วยงานไทยและพยากรณ์ ณ จุด ตั้งแต่ 27 ก.ย. 2569 · พยากรณ์กริดตั้งแต่ 16 ต.ค. 2569 · ปรับปรุงอัตโนมัติทุกวัน |
 | รูปแบบ | Apache Parquet (บีบอัด zstd) แบ่งไฟล์รายเดือน · เวลาเป็น UTC ทั้งหมด |
-| ที่จัดเก็บ | GitHub Releases ของ repository นี้ (`db-catalog`, `db-YYYY-MM`) · ไม่มีค่าใช้จ่ายสำหรับ repository สาธารณะ |
+| ที่จัดเก็บ | GitHub Releases ของ repository นี้ (`db-catalog`, `db-YYYY-MM`, `db-history`) · ไม่มีค่าใช้จ่ายสำหรับ repository สาธารณะ |
 | เครื่องมืออ่าน | DuckDB (SQL), pandas, pyarrow, R `arrow` หรือโปรแกรมใดที่อ่าน Parquet ได้ |
-| ขนาดโดยประมาณ | ~1.3 GB/ปี (พยากรณ์กริด) + ~0.1 GB/ปี (ส่วนอื่น) |
+| ขนาดโดยประมาณ | ~1.3 GB/ปี (พยากรณ์กริด) + ~0.2 GB/ปี (ส่วนอื่น) · ข้อมูลย้อนหลัง 2016–2026 ~0.1 GB |
 
 ## 1. ขั้นตอนการไหลของข้อมูล (data flow)
 
@@ -24,6 +24,9 @@ flowchart LR
     S5["ECMWF Open Data<br/>IFS · AIFS (GRIB)"]
     S6["NOAA NOMADS<br/>GFS (GRIB)"]
     S7["ผู้ใช้<br/>รายงานฝน"]
+    S8["Air4Thai (คพ.)<br/>คุณภาพอากาศ 173 สถานี"]
+    S9["NOAA GHCNh<br/>สถานีรายชั่วโมง 2016–"]
+    S10["ERA5-Land · CHIRPS<br/>GEE · Open-Meteo · CHC"]
   end
 
   subgraph HOURLY["รอบรายชั่วโมง · collect.yml"]
@@ -40,13 +43,18 @@ flowchart LR
     D1["wxdb grid<br/>วันละ 2 รอบ"]
     D2["wxdb etl<br/>วันละครั้ง (ล่าช้า 2 วัน)"]
     D3["wxdb pack<br/>รายเดือน"]
+    D4["wxdb points<br/>วันละ 2 รอบ"]
+    D5["wxdb history · reanalysis<br/>รายเดือน"]
     R1[("Release db-YYYY-MM<br/>ตารางข้อเท็จจริง")]
+    R2[("Release db-history<br/>ข้อมูลย้อนหลังรายปี")]
     R0[("Release db-catalog<br/>ตารางมิติ + manifest")]
     D1 --> R1
     D2 --> R1
     D2 --> R0
     D1 --> R0
     R1 --> D3 --> R1
+    D4 --> R1
+    D5 --> R2
   end
 
   subgraph USE["การใช้ข้อมูล"]
@@ -55,19 +63,24 @@ flowchart LR
     U2["HEAT-SAFE Bangkok<br/>และโครงการวิจัยอื่น"]
   end
 
-  S1 & S2 & S3 & S4 & S7 --> C1
+  S1 & S2 & S3 & S4 & S7 & S8 --> C1
   S5 & S6 --> D1
+  S3 --> D4
+  S9 & S10 --> D5
   C2 --> D2
-  R0 & R1 --> U1 --> U2
+  R0 & R1 & R2 --> U1 --> U2
 ```
 
 | ขั้นตอน | ความถี่ | อินพุต | เอาต์พุต | โปรแกรม |
 |---|---|---|---|---|
 | เก็บข้อมูลรายชั่วโมง | ทุกชั่วโมง | API ของแหล่งข้อมูล | branch `data`, หน้าเว็บ | `collector.py run` |
 | พยากรณ์กริด | 09:20 และ 21:20 UTC | GRIB ของ ECMWF/NOAA | `forecast_grid`, `run` | `python -m wxdb grid` |
+| พยากรณ์ ณ สถานีอุตุนิยมวิทยาทุกแห่ง | 09:20 และ 21:20 UTC | Open-Meteo (10 แบบจำลอง) | `forecast_point` | `python -m wxdb points` |
 | แปลงคลังรายชั่วโมง (ETL) | 21:20 UTC (วันที่ยังไม่ได้แปลงใน 7 วันล่าสุด) | branch `data` | `observation`, `forecast_point`, `forecast_hii`, `forecast_district`, `verification_pair`, `site`, `run` | `python -m wxdb etl` |
 | รวมไฟล์รายเดือน | วันที่ 3 ของเดือน | ไฟล์รายวันของเดือนก่อน | `<table>__YYYY-MM.parquet` | `python -m wxdb pack` |
-| ลดขนาดคลังระยะสั้น | วันที่ 3 ของเดือน | branch `data` | ลบ `runs/` ที่เก่ากว่า 35 วันและแปลงแล้ว | `python -m wxdb prune` |
+| ค่าตรวจวัดย้อนหลัง | วันที่ 3 ของเดือน (ปีปัจจุบัน) | NOAA GHCNh | `observation` (`db-history`) | `python -m wxdb history` |
+| ข้อมูลย้อนหลังเชิงกริด | วันที่ 3 ของเดือน (3 เดือนล่าสุด) | ERA5-Land, CHIRPS | `reanalysis_daily` (`db-history`) | `python -m wxdb reanalysis` |
+| ลดขนาดคลังระยะสั้น | วันที่ 3 ของเดือน | branch `data` | ลบ `runs/` ที่เก่ากว่า 35 วันและแปลงแล้ว แล้วยุบประวัติเหลือ commit เดียว | `python -m wxdb prune`, `scripts/squash_data.sh` |
 
 หลักการ: branch `data` เป็น **คลังระยะสั้น** สำหรับหน้าเว็บและการตรวจสอบรายชั่วโมง ส่วน Releases เป็น **คลังระยะยาว** ที่มีโครงสร้างตาม schema ข้อมูลทุกแถวในคลังระยะยาวเป็น UTC มีหน่วยตามตาราง `variable` และอ้างอิงจุด/แบบจำลองผ่านคีย์
 
@@ -183,7 +196,7 @@ erDiagram
         string var_id PK
         int period_h PK
         float value
-        string source_id FK
+        string source_id PK
     }
     forecast_hii {
         timestamp init_time PK
@@ -212,7 +225,20 @@ erDiagram
         bool ev_fc
         bool ev_ob
     }
+    reanalysis_daily {
+        string dataset_id PK
+        int cell_id PK
+        date date PK
+        float t2m_mean
+        float t2m_max
+        float t2m_min
+        float td2m_mean
+        float precip
+        float ssrd
+        string channel
+    }
     grid_cell ||--o{ forecast_grid : "cell_id"
+    grid_cell ||--o{ reanalysis_daily : "cell_id"
     grid_cell ||--o{ site : "cell_id"
     model ||--o{ forecast_district : "model_id"
     model ||--o{ forecast_grid : "model_id"
@@ -227,6 +253,7 @@ erDiagram
     site ||--o{ verification_pair : "site_id"
     source ||--o{ model : "source_id"
     source ||--o{ observation : "source_id"
+    source ||--o{ reanalysis_daily : "dataset_id"
     source ||--o{ run : "source_id"
     source ||--o{ site : "source_id"
     variable ||--o{ forecast_point : "var_id"
@@ -348,7 +375,7 @@ python scripts/build_db_docs.py                # สร้าง ER และพ
 | คอลัมน์ | ชนิด | คำอธิบาย |
 |---|---|---|
 | `site_id` | ข้อความ | รหัสจุด <เครือข่าย>:<รหัสเดิม> เช่น tmd:48455, tw:1, bkkdist:1001 |
-| `network` | ข้อความ | เครือข่าย: tmd | tw | air4thai | isd | user | bkkdist | prov | loc |
+| `network` | ข้อความ | เครือข่าย: tmd | tw | air4thai | ghcnh | user | bkkdist | prov | loc |
 | `native_id` | ข้อความ | รหัสจุดของหน่วยงานต้นทาง |
 | `name` | ข้อความ | ชื่อจุด |
 | `province` | ข้อความ | จังหวัด |
@@ -452,7 +479,7 @@ python scripts/build_db_docs.py                # สร้าง ER และพ
 #### `observation`
 
 ค่าตรวจวัดจากสถานีและรายงานของผู้ใช้  
-คีย์หลัก: `site_id, time, var_id, period_h` · คีย์นอก: `site_id` → `site.site_id`, `var_id` → `variable.var_id`, `source_id` → `source.source_id`
+คีย์หลัก: `site_id, time, var_id, period_h, source_id` · คีย์นอก: `site_id` → `site.site_id`, `var_id` → `variable.var_id`, `source_id` → `source.source_id`
 
 | คอลัมน์ | ชนิด | คำอธิบาย |
 |---|---|---|
@@ -502,6 +529,24 @@ python scripts/build_db_docs.py                # สร้าง ER และพ
 | `ev_fc` | จริง/เท็จ | พยากรณ์ว่าเกิดเหตุการณ์ (ฝน ≥ เกณฑ์) |
 | `ev_ob` | จริง/เท็จ | เกิดเหตุการณ์จริง |
 
+#### `reanalysis_daily`
+
+ข้อมูลย้อนหลังเชิงกริดรายวัน (วัน UTC) ณ จุดศูนย์กลางเซลล์ th025: ERA5-Land และ CHIRPS ตั้งแต่ปี 2016  
+คีย์หลัก: `dataset_id, cell_id, date` · คีย์นอก: `dataset_id` → `source.source_id`, `cell_id` → `grid_cell.cell_id`
+
+| คอลัมน์ | ชนิด | คำอธิบาย |
+|---|---|---|
+| `dataset_id` | ข้อความ | ชุดข้อมูล: era5_land | chirps |
+| `cell_id` | จำนวนเต็ม | เซลล์กริด th025 |
+| `date` | วันที่ | วันที่ (UTC 00–24) |
+| `t2m_mean` | ทศนิยม 32 บิต | อุณหภูมิเฉลี่ยรายวัน (°C) |
+| `t2m_max` | ทศนิยม 32 บิต | อุณหภูมิสูงสุด (°C) |
+| `t2m_min` | ทศนิยม 32 บิต | อุณหภูมิต่ำสุด (°C) |
+| `td2m_mean` | ทศนิยม 32 บิต | จุดน้ำค้างเฉลี่ย (°C) |
+| `precip` | ทศนิยม 32 บิต | ฝนรวมรายวัน (มม.) |
+| `ssrd` | ทศนิยม 32 บิต | รังสีคลื่นสั้นขาลงรวมรายวัน (MJ/m²) |
+| `channel` | ข้อความ | ช่องทางที่ดึง: gee | openmeteo | chc |
+
 ### รหัสตัวแปร (`variable`)
 
 | var_id | ชื่อ | หน่วย | วิธีสรุปค่า |
@@ -516,6 +561,7 @@ python scripts/build_db_docs.py                # สร้าง ER และพ
 | `rain_flag` | มีฝน (รายงานผู้ใช้) | 0/1 | point |
 | `wind_speed` | ความเร็วลม 10 ม. | ม./วินาที | point |
 | `wind_dir` | ทิศทางลม 10 ม. | องศา | point |
+| `wind_gust` | ลมกระโชก | ม./วินาที | max |
 | `u10` | ลมองค์ประกอบตะวันออก 10 ม. | ม./วินาที | point |
 | `v10` | ลมองค์ประกอบเหนือ 10 ม. | ม./วินาที | point |
 | `mslp` | ความกดอากาศระดับน้ำทะเล | hPa | point |
@@ -523,6 +569,12 @@ python scripts/build_db_docs.py                # สร้าง ER และพ
 | `tcc` | เมฆปกคลุมทั้งหมด | % | point |
 | `ssrd` | รังสีคลื่นสั้นขาลงที่ผิวโลก | W/m² | mean |
 | `pm25` | ฝุ่นละอองขนาดไม่เกิน 2.5 ไมครอน | µg/m³ | mean |
+| `pm10` | ฝุ่นละอองขนาดไม่เกิน 10 ไมครอน | µg/m³ | mean |
+| `o3` | โอโซน | ppb | mean |
+| `co` | คาร์บอนมอนอกไซด์ | ppm | mean |
+| `no2` | ไนโตรเจนไดออกไซด์ | ppb | mean |
+| `so2` | ซัลเฟอร์ไดออกไซด์ | ppb | mean |
+| `aqi` | ดัชนีคุณภาพอากาศ (AQI ของประเทศไทย) |  | point |
 
 ### แหล่งข้อมูล (`source`)
 
@@ -531,7 +583,7 @@ python scripts/build_db_docs.py                # สร้าง ER และพ
 | `tmd` | [TMD Weather3Hours / WeatherToday](https://data.tmd.go.th/api/) | กรมอุตุนิยมวิทยา | station_network | TMD Open Data |
 | `thaiwater` | [ThaiWater (คลังข้อมูลน้ำแห่งชาติ)](https://www.thaiwater.net/) | สถาบันสารสนเทศทรัพยากรน้ำ (สสน.) | station_network | เปิดเผยตามเงื่อนไขของ สสน. |
 | `air4thai` | [Air4Thai](http://air4thai.pcd.go.th/) | กรมควบคุมมลพิษ | station_network | เปิดเผย |
-| `noaa_isd` | [NOAA Integrated Surface Database / GSOD](https://www.ncei.noaa.gov/products/land-based-station/integrated-surface-database) | NOAA NCEI | station_network | สาธารณสมบัติ (US Gov) |
+| `noaa_ghcnh` | [NOAA Global Historical Climatology Network – hourly (GHCNh)](https://www.ncei.noaa.gov/products/global-historical-climatology-network-hourly) | NOAA NCEI | station_network | สาธารณสมบัติ (US Gov) |
 | `user` | รายงานฝนจากผู้ใช้ | ผู้ใช้ระบบ (GitHub Issues) | crowd | CC BY 4.0 |
 | `openmeteo` | [Open-Meteo Forecast / Ensemble API](https://open-meteo.com/) | Open-Meteo (รวบรวมจากศูนย์พยากรณ์) | model_api | CC BY 4.0 (ใช้งานไม่เชิงพาณิชย์ ≤ 10,000 คำขอ/วัน) |
 | `tmd_nwp` | [TMD NWP API (WRF)](https://data.tmd.go.th/nwpapi/) | กรมอุตุนิยมวิทยา | model_api | TMD Open Data |
@@ -539,7 +591,7 @@ python scripts/build_db_docs.py                # สร้าง ER และพ
 | `hii_image` | [ThaiWater ภาพพยากรณ์ฝน WRF-ROMS](https://www.thaiwater.net/weather) | สสน. | model_image | เปิดเผย |
 | `ecmwf_opendata` | [ECMWF Open Data](https://data.ecmwf.int/forecasts/) | ECMWF | model_grib | CC BY 4.0 |
 | `noaa_nomads` | [NOAA NOMADS GRIB filter](https://nomads.ncep.noaa.gov/) | NOAA NCEP | model_grib | สาธารณสมบัติ (US Gov) |
-| `era5` | [ERA5 / ERA5-Land (ARCO, Google Cloud Public Datasets)](https://cloud.google.com/storage/docs/public-datasets/era5) | ECMWF / Copernicus C3S | reanalysis | Copernicus licence |
+| `era5_land` | [ERA5-Land](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land) | ECMWF / Copernicus Climate Change Service | reanalysis | Copernicus licence (อ้างอิงแหล่งที่มา) |
 | `chirps` | [CHIRPS v2.0](https://www.chc.ucsb.edu/data/chirps) | UCSB Climate Hazards Center | satellite | CC BY 4.0 |
 | `heatsafe` | พยากรณ์ภัยความร้อนรายเขต (weather_heatsafe.py) | Consolidated Weather | model_api | CC BY 4.0 |
 <!-- DICT_END -->
@@ -547,7 +599,8 @@ python scripts/build_db_docs.py                # สร้าง ER และพ
 ## 6. ข้อจำกัดและแผนการพัฒนา
 
 - **API ของกรมอุตุนิยมวิทยาให้เฉพาะค่าล่าสุด** ค่าตรวจวัดราย 3 ชม. ที่รอบเก็บข้อมูลพลาด (เช่น GitHub Actions ล่าช้าเกิน 3 ชม.) จะดึงย้อนหลังไม่ได้
-- **ข้อมูลย้อนหลังระยะยาว** (อยู่ระหว่างพัฒนา): NOAA ISD/GSOD ของสถานีในประเทศไทย, ERA5/ERA5-Land (ARCO ERA5 บน Google Cloud Public Datasets) และ CHIRPS v2.0 จะนำเข้าเป็นตาราง `observation` (source `noaa_isd`) และตาราง `reanalysis` บนกริด th025
-- **Air4Thai** (PM2.5) ยังไม่ถูกเก็บในคลังรายชั่วโมง จะเพิ่มในตาราง `observation` (`var_id = pm25`)
-- **พยากรณ์ ณ สถานีอุตุนิยมวิทยาทั่วประเทศ** จากแบบจำลองที่ไม่มีไฟล์ GRIB สาธารณะ (เช่น UKMO, JMA, CMA) จะดึงผ่าน Open-Meteo วันละรอบ ภายใต้โควตาฟรี
+- **ค่าตรวจวัดย้อนหลัง** ใช้ NOAA GHCNh ซึ่ง NOAA ใช้แทน ISD/GSOD (หยุดปรับปรุง ส.ค. 2568) ค่าของสถานีเดียวกันอาจมีทั้งจาก `tmd` (API ของกรมอุตุนิยมวิทยา) และ `noaa_ghcnh` ในเวลาเดียวกัน ควรเลือก `source_id` ให้ชัดเจนเมื่อวิเคราะห์ · สถานีที่ไม่มีรหัส WMO ใช้ `site_id = ghcnh:<ID>`
+- **ERA5-Land/CHIRPS** เป็นค่าของเซลล์ต้นทาง (0.1° และ 0.05°) ที่ครอบจุดศูนย์กลางเซลล์ th025 ไม่ใช่ค่าเฉลี่ยทั้งเซลล์ 0.25° · เซลล์เหนือทะเลไม่มีค่า ERA5-Land · ค่ารายเดือนจาก Open-Meteo ใช้ฝนและรังสีของ ERA5 (ERA5-Land ใช้ฝนและรังสีของ ERA5 เป็นข้อมูลขับเคลื่อน) ค่าจาก GEE (ช่วงย้อนหลัง) มีลำดับความสำคัญสูงกว่าเมื่อมีทั้งสองช่องทาง (คอลัมน์ `channel`)
+- **Air4Thai** ช่วงเฉลี่ยตามนิยามดัชนีคุณภาพอากาศของกรมควบคุมมลพิษ: PM2.5/PM10 24 ชม., O3/CO 8 ชม., NO2/SO2 1 ชม. (`period_h`) · เก็บตั้งแต่ 18 ต.ค. 2569
+- **พยากรณ์ ณ สถานีอุตุนิยมวิทยา** (`wxdb points`) เก็บเฉพาะชั่วโมงตั้งแต่เวลาที่ดึง เนื่องจาก Open-Meteo เติมชั่วโมงก่อนหน้าด้วยผลของรอบก่อน
 - **สัญญาอนุญาต** ข้อมูลแต่ละแหล่งอยู่ภายใต้เงื่อนไขของผู้ผลิต (ตาราง `source`) — การเผยแพร่ต่อควรอ้างอิงแหล่งที่มาตามนั้น

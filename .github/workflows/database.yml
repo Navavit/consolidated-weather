@@ -2,8 +2,11 @@
 #
 #   ทุกวัน 2 รอบ (09:20 และ 21:20 UTC)
 #     grid  ดึงพยากรณ์กริด th025 ของ ECMWF IFS / AIFS และ NOAA GFS รอบ 00/12 UTC ที่ยังขาด (ย้อนได้ 3 วัน)
+#     points พยากรณ์ ณ สถานีอุตุนิยมวิทยาทุกแห่งจากทุกแบบจำลองใน Open-Meteo
 #     etl   แปลงคลังรายชั่วโมง (branch data) ของวันที่ยังไม่ได้แปลงใน 7 วันล่าสุด (ถึง 2 วันก่อน) เป็น Parquet
 #   วันที่ 3 ของทุกเดือน 02:40 UTC
+#     history ปรับปรุงค่าตรวจวัดรายชั่วโมงของปีปัจจุบันจาก NOAA GHCNh (release db-history)
+#     reanalysis ปรับปรุง ERA5-Land (Open-Meteo) และ CHIRPS (CHC) 3 เดือนล่าสุด
 #     pack  รวมไฟล์รายวันของเดือนก่อนเป็นไฟล์รายเดือน
 #     prune ลบ runs/ ที่เก่ากว่า 35 วันและอยู่ในฐานข้อมูลแล้วออกจาก branch data และยุบประวัติของ branch data
 #           เหลือ commit เดียว (force-push) เพื่อไม่ให้ขนาด repository เพิ่มขึ้นเรื่อย ๆ
@@ -20,7 +23,7 @@ on:
       task:
         description: "งานที่ต้องการรัน"
         type: choice
-        options: [daily, grid, etl, pack, prune, catalog]
+        options: [daily, grid, points, etl, pack, prune, catalog, history, reanalysis]
         default: daily
       args:
         description: "อาร์กิวเมนต์เพิ่มเติม เช่น --month 2026-10 หรือ --from 2026-10-01 --to 2026-10-05"
@@ -40,7 +43,7 @@ env:
 
 jobs:
   daily:
-    if: contains(fromJSON('["daily","grid","etl","catalog"]'), github.event_name == 'schedule' && (github.event.schedule == '40 2 3 * *' && 'monthly' || 'daily') || inputs.task)
+    if: contains(fromJSON('["daily","grid","points","etl","catalog"]'), github.event_name == 'schedule' && (github.event.schedule == '40 2 3 * *' && 'monthly' || 'daily') || inputs.task)
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -59,6 +62,10 @@ jobs:
         if: env.WXDB_TASK == 'daily' || env.WXDB_TASK == 'grid'
         run: python -m wxdb grid ${{ env.WXDB_TASK == 'grid' && inputs.args || '' }}
 
+      - name: พยากรณ์ ณ สถานีอุตุนิยมวิทยาทุกแห่ง
+        if: env.WXDB_TASK == 'daily' || env.WXDB_TASK == 'points'
+        run: python -m wxdb points
+
       - name: เตรียม branch data
         if: env.WXDB_TASK == 'daily' || env.WXDB_TASK == 'etl'
         run: |
@@ -74,7 +81,7 @@ jobs:
         run: python -m wxdb status >> "$GITHUB_STEP_SUMMARY" || true
 
   monthly:
-    if: contains(fromJSON('["monthly","pack","prune"]'), github.event_name == 'schedule' && (github.event.schedule == '40 2 3 * *' && 'monthly' || 'daily') || inputs.task)
+    if: contains(fromJSON('["monthly","pack","prune","history","reanalysis"]'), github.event_name == 'schedule' && (github.event.schedule == '40 2 3 * *' && 'monthly' || 'daily') || inputs.task)
     runs-on: ubuntu-latest
     timeout-minutes: 120
     concurrency:
@@ -87,6 +94,14 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt -r requirements-db.txt
+
+      - name: ค่าตรวจวัดย้อนหลัง (NOAA GHCNh)
+        if: env.WXDB_TASK == 'monthly' || env.WXDB_TASK == 'history'
+        run: python -m wxdb history ${{ env.WXDB_TASK == 'history' && inputs.args || '' }}
+
+      - name: ข้อมูลย้อนหลังเชิงกริด (ERA5-Land, CHIRPS)
+        if: env.WXDB_TASK == 'monthly' || env.WXDB_TASK == 'reanalysis'
+        run: python -m wxdb reanalysis
 
       - name: รวมไฟล์รายเดือน
         if: env.WXDB_TASK == 'monthly' || env.WXDB_TASK == 'pack'

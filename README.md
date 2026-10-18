@@ -27,6 +27,7 @@ flowchart LR
     S3["Open-Meteo<br/>แบบจำลอง + ensemble"]
     S5["ECMWF Open Data<br/>NOAA NOMADS (GRIB)"]
     S7["ผู้ใช้<br/>รายงานฝน"]
+    S8["NOAA GHCNh · ERA5-Land · CHIRPS<br/>ข้อมูลย้อนหลัง 2016–"]
   end
   subgraph HOURLY["ทุกชั่วโมง · collect.yml"]
     direction TB
@@ -36,12 +37,12 @@ flowchart LR
   end
   subgraph DB["รายวัน/รายเดือน · database.yml"]
     direction TB
-    D1["wxdb grid · etl · pack"]
+    D1["wxdb grid · points · etl · pack<br/>history · reanalysis"]
     R1[("GitHub Releases<br/>ฐานข้อมูล Parquet")]
   end
   U1["DuckDB / pandas<br/>HEAT-SAFE · งานวิจัยอื่น"]
   S1 & S2 & S3 & S7 --> C1 --> C2 & C3
-  S5 --> D1
+  S5 & S8 --> D1
   C2 --> D1 --> R1 --> U1
 ```
 
@@ -52,6 +53,8 @@ flowchart LR
 | พยากรณ์รายจังหวัดและความถูกต้องรายสถานีทั่วประเทศ | ทุก ~6 ชั่วโมง / ทุกชั่วโมง | `weather_national.py` | `national.json`, ค่ารายวันต่อแบบจำลอง |
 | พยากรณ์กริดทั่วประเทศ (0.25°) | วันละ 2 รอบ | `python -m wxdb grid` (`database.yml`) | ตาราง `forecast_grid` |
 | แปลงคลังระยะสั้นเข้าฐานข้อมูล | วันละครั้ง | `python -m wxdb etl` | ตารางค่าตรวจวัด พยากรณ์ และคู่ตรวจสอบ |
+| พยากรณ์ ณ สถานีอุตุนิยมวิทยาทุกแห่ง (10 แบบจำลอง) | วันละ 2 รอบ | `python -m wxdb points` | ตาราง `forecast_point` |
+| ค่าตรวจวัดรายชั่วโมงย้อนหลัง (NOAA GHCNh) และ ERA5-Land/CHIRPS รายวัน ตั้งแต่ 2016 | รายเดือน | `python -m wxdb history`, `reanalysis` | ตาราง `observation`, `reanalysis_daily` |
 | รวมไฟล์รายเดือนและลดขนาดคลังระยะสั้น | รายเดือน | `python -m wxdb pack`, `prune` | `<table>__YYYY-MM.parquet` |
 
 ## 2. โครงสร้างฐานข้อมูล (ER diagram)
@@ -108,7 +111,7 @@ erDiagram
         timestamp time PK
         string var_id PK
         int period_h PK
-        string source_id FK
+        string source_id PK
     }
     forecast_hii {
         timestamp init_time PK
@@ -126,7 +129,13 @@ erDiagram
         timestamp init_time PK
         string scheme PK
     }
+    reanalysis_daily {
+        string dataset_id PK
+        int cell_id PK
+        date date PK
+    }
     grid_cell ||--o{ forecast_grid : "cell_id"
+    grid_cell ||--o{ reanalysis_daily : "cell_id"
     grid_cell ||--o{ site : "cell_id"
     model ||--o{ forecast_district : "model_id"
     model ||--o{ forecast_grid : "model_id"
@@ -141,6 +150,7 @@ erDiagram
     site ||--o{ verification_pair : "site_id"
     source ||--o{ model : "source_id"
     source ||--o{ observation : "source_id"
+    source ||--o{ reanalysis_daily : "dataset_id"
     source ||--o{ run : "source_id"
     source ||--o{ site : "source_id"
     variable ||--o{ forecast_point : "var_id"
@@ -163,7 +173,9 @@ con.sql("SELECT * FROM observation WHERE site_id = 'tmd:48455' AND var_id = 't2m
 | แบบจำลองบนกริด th025 | ECMWF IFS, ECMWF AIFS, NOAA GFS (ไฟล์ GRIB ของศูนย์พยากรณ์) | 0.25° ราย 3–6 ชม. ถึง 168 ชม. |
 | แบบจำลองระดับภูมิภาค | TMD WRF 2 กม. (ต้องมี token) · HII WRF-ROMS 3 กม. (อ่านจากภาพ) · Google Weather ~5 กม. (ต้องมี key) | รายชั่วโมง/รายวัน |
 | Ensemble | ECMWF ENS, ECMWF AIFS ENS, NOAA GEFS, NOAA AIGEFS, DWD ICON-EPS, UKMO MOGREPS-G, ECCC GEPS | ความน่าจะเป็นฝน |
-| ค่าตรวจวัด | กรมอุตุนิยมวิทยา (ราย 3 ชม., รายวัน) · ThaiWater (รายชั่วโมง, 24 ชม.) · Air4Thai (PM2.5) · รายงานผู้ใช้ | ตามสถานี |
+| ค่าตรวจวัด | กรมอุตุนิยมวิทยา (ราย 3 ชม., รายวัน) · ThaiWater (รายชั่วโมง, 24 ชม.) · Air4Thai (PM2.5, PM10, O3, CO, NO2, SO2, AQI) · รายงานผู้ใช้ | ตามสถานี |
+| ค่าตรวจวัดย้อนหลัง | NOAA GHCNh ~160 สถานีในประเทศไทย (2016–ปัจจุบัน) | รายชั่วโมง |
+| ข้อมูลเชิงกริดย้อนหลัง | ERA5-Land (0.1°) และ CHIRPS v2.0 (0.05°) ณ จุดศูนย์กลางเซลล์ th025 (2016–ปัจจุบัน) | รายวัน |
 
 รายละเอียดหลักการของแต่ละแบบจำลองอยู่ใน [docs/MODELS.md](docs/MODELS.md)
 

@@ -4,6 +4,10 @@
   python -m wxdb etl --archive archive [--day YYYY-MM-DD | --from D1 --to D2]
                                                แปลงคลังรายชั่วโมงของวัน (ค่าเริ่มต้น: 2 วันก่อน) เข้าฐานข้อมูล
   python -m wxdb grid [--days 3]               ดึงพยากรณ์กริดรอบที่ยังขาดในช่วง N วันล่าสุด
+  python -m wxdb points                        พยากรณ์ ณ สถานีอุตุนิยมวิทยาทุกแห่งจากทุกแบบจำลองใน Open-Meteo
+  python -m wxdb history [--years 2016-2025]    ค่าตรวจวัดรายชั่วโมงย้อนหลังจาก NOAA GHCNh (ค่าเริ่มต้น: ปีปัจจุบัน)
+  python -m wxdb reanalysis [--source gee --years 2016-2026]
+                                               ERA5-Land และ CHIRPS รายวัน ณ เซลล์ th025 (ค่าเริ่มต้น: ปรับปรุง 3 เดือนล่าสุด)
   python -m wxdb pack [--month YYYY-MM]        รวมไฟล์รายวันของเดือน (ค่าเริ่มต้น: เดือนก่อน) เป็นไฟล์รายเดือน
   python -m wxdb prune --archive archive [--keep-days 35]
                                                ลบไฟล์ runs/ ที่เก่ากว่า N วันและอยู่ในฐานข้อมูลแล้ว ออกจากคลังรายชั่วโมง
@@ -17,7 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import catalog, etl, grid, schema, store
+from . import catalog, etl, grid, history, points, reanalysis, schema, store
 
 
 def _load_dim(name, workdir):
@@ -117,6 +121,111 @@ def cmd_grid(a):
             print("ข้าม:", f)
 
 
+def cmd_points(a):
+    """พยากรณ์ ณ สถานีอุตุนิยมวิทยาทุกแห่ง (ทุกแบบจำลองใน Open-Meteo)"""
+    with tempfile.TemporaryDirectory() as d:
+        sites = _load_dim("site", d)
+        st = sites[(sites.network == "tmd") & sites.lat.notna()]
+        st = st[pd.to_datetime(st.last_seen) >= pd.Timestamp.now(tz="UTC").tz_localize(None) - pd.Timedelta(days=14)]
+        fp = points.fetch(st[["site_id", "lat", "lon"]])
+        tag = pd.Timestamp.now(tz="UTC").strftime("%Y%m%dT%H")
+        parts = [("forecast_point", m, p) for m, p in store.write_fact(fp, "forecast_point", Path(d) / "pts", suffix=f"stations{tag}")]
+        store.publish_facts(parts)
+        print(f"พยากรณ์ ณ สถานี: {st.site_id.nunique()} สถานี · {fp.model_id.nunique()} แบบจำลอง · {len(fp):,} แถว")
+
+
+def cmd_history(a):
+    """ค่าตรวจวัดรายชั่วโมงย้อนหลังจาก NOAA GHCNh → release db-history (แทนที่ไฟล์ของปีเดิม)"""
+    now = pd.Timestamp.now(tz="UTC")
+    if a.years:
+        y0, _, y1 = a.years.partition("-")
+        years = list(range(int(y0), int(y1 or y0) + 1))
+    else:                                               # ค่าเริ่มต้น (รายเดือน): ปีปัจจุบัน และปีก่อนหน้าในเดือนมกราคม
+        years = [now.year - 1, now.year] if now.month == 1 else [now.year]
+    st = history.stations()
+    store.ensure_release(history.RELEASE, "ฐานข้อมูล: ค่าตรวจวัดย้อนหลัง",
+                         "ค่าตรวจวัดรายชั่วโมงของสถานีในประเทศไทยจาก NOAA GHCNh (2016–ปัจจุบัน) และชุดข้อมูลย้อนหลังอื่น "
+                         "ไฟล์ของปีปัจจุบันถูกแทนที่ทุกเดือน — โครงสร้างและวิธีใช้: docs/DATABASE.md")
+    man = store.load_manifest()
+    with tempfile.TemporaryDirectory() as d:
+        for y in years:
+            df = history.year(st, y)
+            if not len(df):
+                print(f"{y}: ไม่มีข้อมูล")
+                continue
+            path = store.write_parquet(schema.conform(df, "observation"), Path(d) / f"observation__ghcnh_{y}.parquet",
+                                       sort=schema.TABLES["observation"]["pk"])
+            store.upload(history.RELEASE, [path])
+            store.register(man, history.RELEASE, [(path, "observation")])
+            store.save_manifest(man)
+            print(f"{y}: {len(df):,} แถว · {df.site_id.nunique()} สถานี · {path.stat().st_size / 1e6:.1f} MB")
+        sites = _load_dim("site", d)
+        store.publish_dims({"site": etl.merge_sites(sites, [history.site_rows(st).assign(seen=pd.NaT)])}, d, man)
+
+
+def _year_file(tag, name, d):
+    try:
+        return pd.read_parquet(store.download(tag, name, Path(d) / f"old_{name}"))
+    except Exception:                                   # noqa: BLE001 — ยังไม่มีไฟล์ของปีนั้น
+        return None
+
+
+def cmd_reanalysis(a):
+    """ERA5-Land และ CHIRPS รายวัน ณ เซลล์ th025 → release db-history (reanalysis__<dataset>_<ปี>.parquet)
+    --source gee: ดึงทั้งปีผ่าน Google Earth Engine (ย้อนหลัง, ต้องมี GEE_PROJECT)
+    ค่าเริ่มต้น (รายเดือน): 3 เดือนล่าสุดผ่าน Open-Meteo (ERA5-Land) และไฟล์ของ CHC (CHIRPS) แล้วรวมเข้ากับไฟล์ของปีนั้น"""
+    cells = reanalysis.cells()
+    store.ensure_release(reanalysis.RELEASE, "ฐานข้อมูล: ค่าตรวจวัดย้อนหลัง", "ข้อมูลย้อนหลัง — docs/DATABASE.md")
+    now = pd.Timestamp.now(tz="UTC").tz_localize(None)
+    man = store.load_manifest()
+    with tempfile.TemporaryDirectory() as d:
+        jobs = {}                                       # (dataset, year) → [DataFrame ใหม่]
+        if a.source == "gee":
+            y0, _, y1 = (a.years or str(now.year)).partition("-")
+            for y in range(int(y0), int(y1 or y0) + 1):
+                for ds in ("era5_land", "chirps"):
+                    for m in range(1, 13):
+                        if pd.Timestamp(y, m, 1) > now:
+                            break
+                        df = reanalysis.gee_month(ds, y, m, cells)
+                        if len(df):
+                            jobs.setdefault((ds, y), []).append(df)
+                    print(f"{ds} {y}: ดึงแล้ว", flush=True)
+                _write_reanalysis(jobs, man, d, replace=True)
+                jobs = {}
+        else:
+            months = [(now - pd.DateOffset(months=k)).to_period("M") for k in (3, 2, 1, 0)]
+            for pm in months:
+                for ds, fn in (("era5_land", lambda y, m: reanalysis.openmeteo_month(y, m, cells)),
+                               ("chirps", lambda y, m: reanalysis.chc_month(y, m, cells))):
+                    try:
+                        df = fn(pm.year, pm.month)
+                    except Exception as e:              # noqa: BLE001 — เดือนที่ยังไม่เผยแพร่: ข้าม
+                        print(f"{ds} {pm}: ข้าม ({str(e)[:100]})")
+                        continue
+                    if len(df):
+                        jobs.setdefault((ds, pm.year), []).append(df)
+            _write_reanalysis(jobs, man, d, replace=False)
+
+
+def _write_reanalysis(jobs, man, d, replace):
+    for (ds, y), parts in jobs.items():
+        name = f"reanalysis__{ds}_{y}.parquet"
+        new = pd.concat(parts, ignore_index=True)
+        old = None if replace else _year_file(reanalysis.RELEASE, name, d)
+        if old is not None and len(old):
+            # ลำดับความสำคัญ: ค่าจาก GEE (ชุดย้อนหลัง) > ค่าใหม่ > ค่าเดิมจากช่องทางรายเดือน
+            both = pd.concat([old.assign(_old=1), new.assign(_old=0)], ignore_index=True)
+            both["date"] = pd.to_datetime(both["date"])
+            both["_rank"] = (both.channel != "gee") * 2 + both._old
+            new = both.sort_values("_rank").drop_duplicates(["cell_id", "date"], keep="first").drop(columns=["_old", "_rank"])
+        path = store.write_parquet(schema.conform(new, "reanalysis_daily"), Path(d) / name, sort=schema.TABLES["reanalysis_daily"]["pk"])
+        store.upload(reanalysis.RELEASE, [path])
+        store.register(man, reanalysis.RELEASE, [(path, "reanalysis_daily")])
+        store.save_manifest(man)
+        print(f"{name}: {len(new):,} แถว · {path.stat().st_size / 1e6:.1f} MB", flush=True)
+
+
 def cmd_pack(a):
     month = a.month or (pd.Timestamp.now(tz="UTC").tz_localize(None).to_period("M") - 1).strftime("%Y-%m")
     tag = f"db-{month}"
@@ -179,6 +288,14 @@ def main(argv=None):
     g.add_argument("--models", nargs="*")
     g.add_argument("--max-cycles", type=int, default=9)
     g.set_defaults(fn=cmd_grid)
+    s.add_parser("points").set_defaults(fn=cmd_points)
+    hp = s.add_parser("history")
+    hp.add_argument("--years", help="เช่น 2016-2025 หรือ 2026 (ค่าเริ่มต้น: ปีปัจจุบัน)")
+    hp.set_defaults(fn=cmd_history)
+    rp = s.add_parser("reanalysis")
+    rp.add_argument("--source", choices=["gee", "monthly"], default="monthly")
+    rp.add_argument("--years", help="สำหรับ --source gee เช่น 2016-2026")
+    rp.set_defaults(fn=cmd_reanalysis)
     k = s.add_parser("pack")
     k.add_argument("--month")
     k.set_defaults(fn=cmd_pack)

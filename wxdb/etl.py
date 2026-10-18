@@ -80,6 +80,16 @@ def observations(archive, day):
         parts.append(_melt(x, sid, t, [("rain", "precip", 24, 1)], "thaiwater"))
         sites.append(pd.DataFrame({"site_id": sid, "network": "tw", "native_id": x["id"], "name": x.get("name"), "agency": x.get("agency"),
                                    "lat": x["lat"], "lon": x["lon"], "source_id": "thaiwater", "seen": t}))
+    x = _read_csv(a / "obs" / "air4thai" / f"{d}.csv", dtype={"id": str})
+    if x is not None and len(x):
+        sid = "air4thai:" + x["id"]
+        parts.append(_melt(x, sid, _utc(x["time"]), [
+            ("pm25", "pm25", 24, 1), ("pm10", "pm10", 24, 1), ("o3", "o3", 8, 1), ("co", "co", 8, 1),
+            ("no2", "no2", 1, 1), ("so2", "so2", 1, 1), ("aqi", "aqi", 0, 1)], "air4thai"))
+        sites.append(pd.DataFrame({"site_id": sid, "network": "air4thai", "native_id": x["id"], "name": x.get("name"),
+                                   "province": x["area"].str.split(",").str[-1].str.strip() if "area" in x else None,
+                                   "agency": "กรมควบคุมมลพิษ", "lat": x["lat"], "lon": x["lon"], "source_id": "air4thai",
+                                   "seen": _utc(x["time"])}))
     for f in sorted((a / "observations").glob("*.json")):
         j = json.loads(f.read_text(encoding="utf-8"))
         t = pd.Timestamp(j["obs_time"])

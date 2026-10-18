@@ -717,6 +717,11 @@ def update(archive, locations, cfg=None, site_dir=None):
         except Exception as e:
             print(f"⚠️ ฝนรายชั่วโมง {sid}: {e}")
     archive_obs(archive, hourly, "tw1h")
+    # คุณภาพอากาศทุกสถานี Air4Thai (API ให้เฉพาะค่าล่าสุด จึงต้องเก็บเองทุกรอบ)
+    try:
+        archive_obs(archive, weather_now.fetch_air4thai_all(), "air4thai")
+    except Exception as e:
+        print(f"⚠️ Air4Thai: {e}")
     active = [p for p in points if p.get("active", True)]
     log = collect_points(active, archive, cfg, google_for=locations[0][2] if locations else None)
     print(log.to_string(index=False))

@@ -149,6 +149,29 @@ def fetch_air4thai():
     return [s for s in out if s["lat"] is not None and s["lon"] is not None]
 
 
+def fetch_air4thai_all():
+    """ค่าล่าสุดของทุกสถานี Air4Thai ทุกพารามิเตอร์ (เก็บเข้าคลังรายชั่วโมง obs/air4thai)
+    ช่วงเฉลี่ยตามนิยามดัชนีคุณภาพอากาศของกรมควบคุมมลพิษ: PM2.5/PM10 24 ชม., O3/CO 8 ชม., NO2/SO2 1 ชม."""
+    try:
+        r = core.SESSION.get(AIR4THAI_URL, timeout=60)
+    except requests.exceptions.SSLError:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        r = core.SESSION.get(AIR4THAI_URL, timeout=60, verify=False)
+    r.raise_for_status()
+    out = []
+    for s in r.json().get("stations", []):
+        last = s.get("AQILast") or {}
+        val = lambda k, f="value": (lambda v: v if v is not None and v >= 0 else None)(_f((last.get(k) or {}).get(f)))
+        lat, lon = _f(s.get("lat")), _f(s.get("long"))
+        if lat is None or lon is None or not last.get("date"):
+            continue
+        out.append({"id": s.get("stationID"), "name": s.get("nameTH"), "area": s.get("areaTH"), "type": s.get("stationType"),
+                    "lat": lat, "lon": lon, "time": f"{last.get('date')}T{last.get('time')}",
+                    "pm25": val("PM25"), "pm10": val("PM10"), "o3": val("O3"), "co": val("CO"), "no2": val("NO2"), "so2": val("SO2"),
+                    "aqi": val("AQI", "aqi")})
+    return out
+
+
 def nearest(lat, lon, stations, max_km=MAX_STATION_KM):
     best = min(stations, key=lambda s: distance_km(lat, lon, s["lat"], s["lon"]), default=None)
     if best is None:
