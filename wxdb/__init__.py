@@ -23,7 +23,7 @@ def connect(tables=None, months=None, cache_dir=None):
     from . import store
     man = store.load_manifest(fresh=False)
     con = duckdb.connect()
-    con.sql("INSTALL httpfs; LOAD httpfs;")
+    con.sql("INSTALL httpfs; LOAD httpfs; SET enable_progress_bar = false;")
     by_table = {}
     for f in man["files"]:
         if tables and f["table"] not in tables:
