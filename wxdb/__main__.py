@@ -91,6 +91,7 @@ def cmd_grid(a):
         todo = grid.due_cycles(have, days=a.days)
         if a.models:
             todo = [t for t in todo if t[0] in a.models]
+        todo = todo[:a.max_cycles]                      # จำกัดต่อรอบ ไม่ให้เกินเวลาของ GitHub Actions (รอบที่เหลือดึงในรอบถัดไป)
         if not todo:
             print("พยากรณ์กริดครบทุกรอบแล้ว")
             return
@@ -176,6 +177,7 @@ def main(argv=None):
     g = s.add_parser("grid")
     g.add_argument("--days", type=int, default=3)
     g.add_argument("--models", nargs="*")
+    g.add_argument("--max-cycles", type=int, default=9)
     g.set_defaults(fn=cmd_grid)
     k = s.add_parser("pack")
     k.add_argument("--month")

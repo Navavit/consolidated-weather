@@ -161,7 +161,7 @@ def fetch_ecmwf(model_id, init, workdir):
     m = MODELS[model_id]
     path = Path(workdir) / f"{model_id}.grib2"
     last = None
-    for src in ("aws", "ecmwf", "google"):
+    for src in ("ecmwf", "azure", "google"):        # AWS mirror ถูกจำกัดอัตรา (503 Slow Down) จึงไม่ใช้
         try:
             Client(source=src, model=m["om"]).retrieve(date=init.strftime("%Y-%m-%d"), time=init.hour, type="fc",
                                                        step=m["steps"], param=ECMWF_PARAMS, target=str(path))
@@ -211,7 +211,7 @@ def due_cycles(have, days=3, now=None):
     now = pd.Timestamp(now or pd.Timestamp.utcnow()).tz_localize(None)
     start = (now - pd.Timedelta(days=days)).floor("12h")
     out = []
-    for init in pd.date_range(start, now - pd.Timedelta(hours=8), freq="12h"):
+    for init in pd.date_range(start, now - pd.Timedelta(hours=8), freq="12h")[::-1]:      # รอบล่าสุดก่อน
         for m in MODELS:
             if (m, init) not in have:
                 out.append((m, init))
