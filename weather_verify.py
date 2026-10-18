@@ -28,6 +28,10 @@ import weather_now
 import weather_store as store
 
 LOOKBACK_DAYS = 9                     # พยากรณ์ย้อนหลังสูงสุดที่ใช้จับคู่ (8 วัน + เผื่อ)
+# ค่าวัดหนึ่งค่าจับคู่ได้ครบตั้งแต่รอบแรกที่ได้รับ (ใช้เฉพาะพยากรณ์ที่ออกก่อนเวลาวัด) จึงประมวลผลเฉพาะค่าวัดล่าสุด
+# เผื่อไว้ 3 วันกรณีระบบหยุดทำงาน · คู่ที่บันทึกแล้วคงอยู่ (save_pairs รวมกับของเดิมและตัดซ้ำ)
+PAIR_RECENT_DAYS = 3
+_RUNS_CACHE = {}
 GAUGE_MAX_KM = 10
 NATIONAL_LEADS = [1, 3, 7]
 PAIR_KEYS = ["source", "point", "obs_time", "variable", "model", "kind", "lead", "init"]
@@ -228,7 +232,20 @@ def load_point_runs(archive, lat, lon, days=LOOKBACK_DAYS):
     """คืน list ของ (fetched_at, DataFrame กว้าง index=valid_time, init) ของจุดนี้
 
     init(model) = เวลาเริ่มรันของโมเดลในรอบที่ดึง (เวลาไทย) จากไฟล์ .runs.json คู่กัน หรือประมาณถ้าไม่มี
+    อ่านไฟล์ครั้งเดียวต่อกระบวนการ (หลายฟังก์ชันใช้จุดเดียวกัน)
     """
+    key = (str(archive), f"{lat:.3f}", f"{lon:.3f}", days)
+    if key not in _RUNS_CACHE:
+        _RUNS_CACHE[key] = _load_point_runs(archive, lat, lon, days)
+    return _RUNS_CACHE[key]
+
+
+def _recent(o, days=PAIR_RECENT_DAYS):
+    """ค่าวัดเฉพาะช่วงล่าสุด (ค่าที่เก่ากว่านี้จับคู่ไปแล้วในรอบก่อน)"""
+    return o[o["time"] >= pd.Timestamp.now() - pd.Timedelta(days=days)] if len(o) else o
+
+
+def _load_point_runs(archive, lat, lon, days=LOOKBACK_DAYS):
     tag = f"_{lat:.3f}_{lon:.3f}.csv.gz"
     since = (pd.Timestamp.now() - pd.Timedelta(days=days)).strftime("%Y%m%d")
     out = []
@@ -300,8 +317,8 @@ def _pairs_3h(archive, points, obs, kind, source, cfg=None, ens=True):
     thr = cfg["verify_threshold_mm"]
     recs = []
     for p in (p for p in points if p["kind"] == kind):
-        o = obs[obs["id"] == str(p["id"])]
-        runs = load_point_runs(archive, p["lat"], p["lon"])
+        o = _recent(obs[obs["id"] == str(p["id"])])
+        runs = load_point_runs(archive, p["lat"], p["lon"]) if len(o) else []
         if o.empty or not runs:
             continue
         for _, ob in o.iterrows():
@@ -345,7 +362,7 @@ def pairs_thaiwater24h(archive, points, cfg=None):
     thr = cfg["rain_threshold_mm"]
     recs = []
     for p in (p for p in points if p["kind"] == "tw"):
-        o = obs[obs["id"] == str(p["id"])].copy()
+        o = _recent(obs[obs["id"] == str(p["id"])]).copy()
         runs = load_point_runs(archive, p["lat"], p["lon"])
         if o.empty or not runs:
             continue
@@ -393,7 +410,7 @@ def pairs_hii24h(archive, points, cfg=None):
     thr = cfg["rain_threshold_mm"]
     recs = []
     for p in (p for p in points if p["kind"] == "tw"):
-        o = obs[obs["id"] == str(p["id"])].copy()
+        o = _recent(obs[obs["id"] == str(p["id"])]).copy()
         h = fc_hii[fc_hii["point"] == p["name"]]
         if o.empty or h.empty:
             continue
