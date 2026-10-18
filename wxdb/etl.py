@@ -139,7 +139,7 @@ def forecast_points(archive, day, gauges):
         long["model_id"] = pre_model[1].map(catalog.model_id)
         inits = {n: pd.Timestamp(r["init"]) for n, r in (meta.get("runs") or {}).items() if r.get("init")}
         long["init_time"] = long.model_name.map(inits)
-        long["init_time"] = long.init_time.fillna(fetched.floor("h"))     # แหล่งที่ไม่มี metadata รอบ: ใช้เวลาที่ดึง
+        long["init_time"] = pd.to_datetime(long.init_time).fillna(fetched.floor("h"))   # แหล่งที่ไม่มี metadata รอบ: ใช้เวลาที่ดึง
         long["fetched_at"] = fetched
         long["site_id"] = sid
         frames.append(long.drop(columns=["col", "model_name"]))

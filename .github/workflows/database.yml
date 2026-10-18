@@ -5,7 +5,8 @@
 #     etl   แปลงคลังรายชั่วโมง (branch data) ของวันที่ยังไม่ได้แปลงใน 7 วันล่าสุด (ถึง 2 วันก่อน) เป็น Parquet
 #   วันที่ 3 ของทุกเดือน 02:40 UTC
 #     pack  รวมไฟล์รายวันของเดือนก่อนเป็นไฟล์รายเดือน
-#     prune ลบ runs/ ที่เก่ากว่า 35 วันและอยู่ในฐานข้อมูลแล้วออกจาก branch data (commit ปกติ)
+#     prune ลบ runs/ ที่เก่ากว่า 35 วันและอยู่ในฐานข้อมูลแล้วออกจาก branch data และยุบประวัติของ branch data
+#           เหลือ commit เดียว (force-push) เพื่อไม่ให้ขนาด repository เพิ่มขึ้นเรื่อย ๆ
 #
 # ทุกขั้นใช้บริการที่ไม่มีค่าใช้จ่าย: GitHub Actions (repository สาธารณะ), GitHub Releases, ECMWF Open Data, NOAA NOMADS
 name: ฐานข้อมูล
@@ -96,7 +97,7 @@ jobs:
         run: |
           scripts/data_worktree.sh
           python -m wxdb prune --archive archive ${{ env.WXDB_TASK == 'prune' && inputs.args || '' }}
-          scripts/push_data.sh prune
+          scripts/squash_data.sh
 
       - name: สรุปสถานะ
         if: always()
