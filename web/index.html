@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>เทียบพยากรณ์อากาศ</title>
-  <meta name="description" content="เปรียบเทียบพยากรณ์ฝนและอากาศจากหลายโมเดล (TMD WRF, ECMWF, GFS, ICON ฯลฯ) อัปเดตทุกชั่วโมง">
+  <title>ระบบเปรียบเทียบและตรวจสอบพยากรณ์อากาศหลายแบบจำลอง</title>
+  <meta name="description" content="ระบบเปรียบเทียบพยากรณ์ฝน อุณหภูมิ และดัชนีความร้อนจากแบบจำลองเชิงตัวเลขหลายระบบ พร้อมการตรวจสอบความถูกต้องกับค่าตรวจวัดในประเทศไทย ปรับปรุงทุกชั่วโมง">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌦️</text></svg>">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="style.css">
@@ -13,7 +13,7 @@
   <header class="top">
     <div class="wrap top-row">
       <div>
-        <h1>🌦️ เทียบพยากรณ์อากาศหลายโมเดล</h1>
+        <h1>🌦️ ระบบเปรียบเทียบและตรวจสอบพยากรณ์อากาศหลายแบบจำลอง</h1>
         <p class="sub" id="updated">กำลังโหลด…</p>
       </div>
       <button id="theme" class="ghost" type="button" aria-label="สลับโหมดสว่าง/มืด">🌓</button>
@@ -23,38 +23,38 @@
   <main class="wrap">
     <section class="rainbar" id="rainbar" aria-labelledby="rb-q" hidden>
       <div class="rb-top">
-        <p id="rb-q" class="rb-q">ตอนนี้ฝนตกไหม ที่ <b id="rb-loc">…</b></p>
+        <p id="rb-q" class="rb-q">รายงานสภาพฝนขณะนี้ ณ <b id="rb-loc">…</b></p>
         <button id="rb-gps" class="ghost small" type="button">📍 ใช้ GPS</button>
       </div>
       <div class="rb-btns">
-        <button id="rb-rain" class="big rain" type="button">🌧️ ตก</button>
-        <button id="rb-dry" class="big dry" type="button">☀️ ไม่ตก</button>
+        <button id="rb-rain" class="big rain" type="button">🌧️ มีฝน</button>
+        <button id="rb-dry" class="big dry" type="button">☀️ ไม่มีฝน</button>
       </div>
       <p class="rb-hint" id="rb-hint"></p>
     </section>
 
     <nav class="filters" aria-label="ตัวกรอง">
       <div class="chips" id="locations" role="tablist" aria-label="ตำแหน่ง"></div>
-      <a id="edit-loc" class="link" target="_blank" rel="noopener">＋ เพิ่ม/แก้ตำแหน่ง</a>
+      <a id="edit-loc" class="link" target="_blank" rel="noopener">＋ เพิ่ม/แก้ไขตำแหน่ง</a>
     </nav>
-    <p class="note" id="gps-note" hidden>📍 คำนวณพยากรณ์ตรงพิกัดของคุณในเบราว์เซอร์ (ส่งพิกัดไปขอข้อมูลที่ Open-Meteo โดยตรง โครงการนี้ไม่เก็บ) · ใช้โมเดลระดับโลกทุกตัว + ensemble ·
-      ไม่มี TMD WRF และ Google Weather (ต้องใช้ key) · ค่าวัดจริงใช้สถานีที่ใกล้คุณที่สุด</p>
+    <p class="note" id="gps-note" hidden>📍 ประมวลผลพยากรณ์ ณ พิกัดของผู้ใช้ภายในเบราว์เซอร์ (ส่งพิกัดไปยัง Open-Meteo โดยตรง ระบบไม่จัดเก็บพิกัด) · ใช้แบบจำลองระดับโลกทั้งหมดและระบบ ensemble ·
+      ไม่รวม TMD WRF และ Google Weather (ต้องใช้รหัสเข้าถึง) · ค่าตรวจวัดใช้สถานีที่ใกล้ที่สุด</p>
 
     <nav class="steps" id="steps" aria-label="ลำดับเนื้อหา">
-      <a href="#step-1"><b>①</b> ตอนนี้</a>
-      <a href="#step-2"><b>②</b> พยากรณ์</a>
-      <a href="#step-3"><b>③</b> แยกแหล่ง</a>
-      <a href="#step-4"><b>④</b> รายชั่วโมง</a>
-      <a href="#step-5"><b>⑤</b> ที่มา + ความแม่น</a>
+      <a href="#step-1"><b>①</b> สภาพปัจจุบัน</a>
+      <a href="#step-2"><b>②</b> ผลพยากรณ์</a>
+      <a href="#step-3"><b>③</b> รายแบบจำลอง</a>
+      <a href="#step-4"><b>④</b> อนุกรมรายชั่วโมง</a>
+      <a href="#step-5"><b>⑤</b> แหล่งที่มาและการตรวจสอบ</a>
     </nav>
     <p class="note timebase" id="timebase"></p>
 
     <section id="step-1" aria-labelledby="h-now">
-      <h2 id="h-now"><span class="step-no" aria-hidden="true">①</span> ตอนนี้ <small>ค่าวัดจริงจากสถานีใกล้ที่สุด + ค่าจากโมเดล</small></h2>
+      <h2 id="h-now"><span class="step-no" aria-hidden="true">①</span> สภาพอากาศปัจจุบัน <small>ค่าตรวจวัดจากสถานีที่ใกล้ที่สุดและค่าวิเคราะห์จากแบบจำลอง</small></h2>
       <div class="cards" id="now"></div>
       <div class="radar-card">
         <div class="radar-head">
-          <h3>🗺️ แผนที่ฝน: เรดาร์ + สถานีวัด <span id="radar-time" class="muted"></span></h3>
+          <h3>🗺️ แผนที่ฝน: ภาพเรดาร์และสถานีตรวจวัด <span id="radar-time" class="muted"></span></h3>
           <button id="radar-play" class="ghost small" type="button" aria-label="เล่น/หยุดภาพเคลื่อนไหว">▶︎ ย้อนหลัง 2 ชม.</button>
         </div>
         <div id="map" class="map" role="region" aria-label="แผนที่เรดาร์ฝน สถานีวัด และตำแหน่ง"></div>
@@ -62,32 +62,32 @@
           <div class="chips map-layers" id="map-layers" role="group" aria-label="เลือกชั้นข้อมูลบนแผนที่"></div>
           <div class="map-legend" id="map-legend" aria-label="คำอธิบายสี"></div>
         </div>
-        <p class="note">เรดาร์: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> (ทุก 10 นาที) ·
-          จุดสี = ฝน 24 ชม. ล่าสุดที่สถานีวัดได้ (โทรมาตร ThaiWater ทุกหน่วยงาน, สถานีอุตุฯ กรมอุตุนิยมวิทยา) · PM2.5 จาก Air4Thai ·
-          วงแหวน = จุดตรวจที่ใช้เทียบความแม่นของโมเดล · แตะจุดเพื่อดูค่า · แตะวงกลมใหญ่เพื่อเลือกตำแหน่ง</p>
+        <p class="note">ภาพเรดาร์: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> (ทุก 10 นาที) ·
+          สัญลักษณ์สี = ปริมาณฝนสะสม 24 ชม. ล่าสุดของสถานี (โทรมาตร ThaiWater ทุกหน่วยงาน และสถานีของกรมอุตุนิยมวิทยา) · PM2.5 จาก Air4Thai ·
+          วงแหวน = จุดตรวจสอบที่ใช้ประเมินความถูกต้องของแบบจำลอง · เลือกสัญลักษณ์เพื่อดูค่า · เลือกวงกลมใหญ่เพื่อเปลี่ยนตำแหน่ง</p>
       </div>
     </section>
 
     <section id="step-2" aria-labelledby="h-next">
-      <h2 id="h-next"><span class="step-no" aria-hidden="true">②</span> ฝนชั่วโมงถัดไป <small>ฝนสะสมนับจากเวลาที่ดึงพยากรณ์ · ค่ากลางของทุกโมเดล</small></h2>
+      <h2 id="h-next"><span class="step-no" aria-hidden="true">②</span> พยากรณ์ฝนช่วงถัดไป <small>ฝนสะสมนับจากเวลาที่ได้รับผลพยากรณ์ · ค่ามัธยฐานของทุกแบบจำลอง</small></h2>
       <div class="tiles" id="next"></div>
     </section>
 
     <section aria-labelledby="h-brief">
-      <h2 id="h-brief">สรุปรายวัน <small>1 วัน = 07:00 → 07:00 น. · ค่ากลาง (median) ของทุกโมเดล</small></h2>
+      <h2 id="h-brief">สรุปรายวัน <small>วันอุตุนิยมวิทยา 07:00 → 07:00 น. · ค่ามัธยฐาน (median) ของทุกแบบจำลอง</small></h2>
       <div class="cards" id="brief"></div>
     </section>
 
     <details class="fold" id="step-3">
-      <summary><span class="step-no" aria-hidden="true">③</span> <b>แยกแหล่ง</b> <small>ฝนแยกโมเดล · โอกาสฝน ensemble · HII · พารามิเตอร์อื่น</small></summary>
+      <summary><span class="step-no" aria-hidden="true">③</span> <b>ผลพยากรณ์รายแบบจำลอง</b> <small>ฝนรายแบบจำลอง · ความน่าจะเป็นจาก ensemble · HII · ตัวแปรอื่น</small></summary>
     <section aria-labelledby="h-rain">
-      <h2 id="h-rain">ฝนแยกโมเดล (มม.) <small>ช่วงเวลาเดียวกับ ② · เรียงจากละเอียดไปหยาบ</small></h2>
+      <h2 id="h-rain">ฝนรายแบบจำลอง (มม.) <small>ช่วงเวลาเดียวกับ ② · เรียงตามความละเอียดเชิงพื้นที่จากสูงไปต่ำ</small></h2>
       <div class="table-wrap" id="rain-table"></div>
       <p class="note" id="rain-note"></p>
     </section>
 
     <section aria-labelledby="h-ens">
-      <h2 id="h-ens">โอกาสฝนจาก ensemble (%) <small id="ens-sub"></small></h2>
+      <h2 id="h-ens">ความน่าจะเป็นของฝนจากระบบ ensemble (%) <small id="ens-sub"></small></h2>
       <div class="table-wrap" id="ens-table"></div>
     </section>
 
@@ -98,19 +98,19 @@
     </section>
 
     <section aria-labelledby="h-params">
-      <h2 id="h-params">พารามิเตอร์อื่นแยกโมเดล <small>ช่วงเวลาเดียวกับตารางฝน</small></h2>
-      <label class="select"><span>พารามิเตอร์</span><select id="param"></select></label>
+      <h2 id="h-params">ตัวแปรอื่นรายแบบจำลอง <small>ช่วงเวลาเดียวกับตารางฝน</small></h2>
+      <label class="select"><span>ตัวแปร</span><select id="param"></select></label>
       <div class="table-wrap" id="param-table"></div>
     </section>
     </details>
 
     <details class="fold" id="step-4">
-      <summary><span class="step-no" aria-hidden="true">④</span> <b>รายชั่วโมง 7 วัน</b> <small>กราฟฝน อุณหภูมิ ความชื้น ลม PM2.5</small></summary>
+      <summary><span class="step-no" aria-hidden="true">④</span> <b>อนุกรมรายชั่วโมง 7 วัน</b> <small>ฝน อุณหภูมิ ความชื้น ลม และ PM2.5</small></summary>
     <section aria-labelledby="h-charts">
       <div class="section-head">
-        <h2 id="h-charts">รายชั่วโมง 7 วัน</h2>
+        <h2 id="h-charts">อนุกรมรายชั่วโมง 7 วัน</h2>
         <label class="select">
-          <span>เส้นสีส้ม = โมเดล</span>
+          <span>เส้นสีส้ม = แบบจำลอง</span>
           <select id="highlight"></select>
         </label>
       </div>
@@ -119,24 +119,24 @@
     </details>
 
     <details class="fold" id="step-5">
-      <summary><span class="step-no" aria-hidden="true">⑤</span> <b>ที่มา + ความแม่น</b> <small>รอบรันของแต่ละโมเดล · 🏆 โมเดลไหนแม่น</small></summary>
+      <summary><span class="step-no" aria-hidden="true">⑤</span> <b>แหล่งที่มาและการตรวจสอบความถูกต้อง</b> <small>รอบการประมวลผลของแต่ละแบบจำลอง · 🏆 ผลการตรวจสอบ</small></summary>
     <section aria-labelledby="h-runs">
-      <h2 id="h-runs">ที่มา: รอบรันของแต่ละโมเดล <small id="runs-sub">ข้อมูลในหน้านี้มาจากรอบไหน</small></h2>
+      <h2 id="h-runs">รอบการประมวลผล (initialisation) ของแต่ละแบบจำลอง <small id="runs-sub">ผลพยากรณ์ในหน้านี้มาจากรอบใด</small></h2>
       <div class="table-wrap" id="runs-table"></div>
-      <p class="note">รอบรัน (init) = เวลาที่โมเดลเริ่มคำนวณ · <b>ยืนยันแล้ว</b> = อ่านจาก metadata ของ Open-Meteo · <b>ประมาณ</b> = คำนวณจากตารางรอบรันและเวลาที่ผลมักออก ·
-        Google อัปเดตต่อเนื่อง ไม่มีรอบรัน</p>
+      <p class="note">รอบการประมวลผล (init) = เวลาเริ่มต้นการคำนวณของแบบจำลอง · <b>ยืนยันแล้ว</b> = อ้างอิงจาก metadata ของ Open-Meteo · <b>ประมาณ</b> = คำนวณจากตารางรอบการประมวลผลและเวลาเผยแพร่โดยทั่วไป ·
+        Google ปรับปรุงต่อเนื่องโดยไม่มีรอบการประมวลผลที่ระบุได้</p>
     </section>
 
     <section aria-labelledby="h-verify" class="verify">
-      <h2 id="h-verify">🏆 โมเดลไหนแม่น <small id="v-sub">เทียบกับค่าที่วัดได้จริง</small></h2>
+      <h2 id="h-verify">🏆 การตรวจสอบความถูกต้องของแบบจำลอง <small id="v-sub">เทียบกับค่าตรวจวัด</small></h2>
       <div class="chips v-mode" role="tablist" aria-label="มุมมอง">
-        <button class="chip" id="vm-user" role="tab" type="button">👤 สำหรับผู้ใช้ทั่วไป</button>
-        <button class="chip" id="vm-wmo" role="tab" type="button">🔬 มาตรฐาน WMO (นักวิจัย)</button>
+        <button class="chip" id="vm-user" role="tab" type="button">👤 มุมมองผู้ใช้งาน</button>
+        <button class="chip" id="vm-wmo" role="tab" type="button">🔬 มาตรฐาน WMO (สำหรับงานวิจัย)</button>
       </div>
 
       <div id="v-user">
-        <p class="note">คำถาม: <b>ถ้าเปิดเว็บนี้แล้วเห็นว่าฝนจะตก เชื่อได้แค่ไหน</b> — ใช้ช่วงเวลาเดียวกับตารางด้านบน (+3 ชม. … พรุ่งนี้ … D+7) นับจากเวลาที่ดึงพยากรณ์
-          และใช้เฉพาะพยากรณ์ที่มีให้ใช้จริง ณ เวลานั้น (โมเดลที่ส่งผลช้าก็ได้ข้อมูลเก่ากว่าจริง) · “ฝนตก” = ≥ 1 มม. ในช่วงนั้น</p>
+        <p class="note">คำถามการประเมิน: <b>ผลพยากรณ์ที่ผู้ใช้เห็นบนหน้าเว็บมีความน่าเชื่อถือเพียงใด</b> — ใช้ช่วงเวลาเดียวกับตารางข้างต้น (+3 ชม. … วันถัดไป … D+7) นับจากเวลาที่ได้รับผลพยากรณ์
+          และใช้เฉพาะผลพยากรณ์ที่เผยแพร่แล้ว ณ เวลานั้น (แบบจำลองที่เผยแพร่ช้าจึงใช้ผลรอบก่อนหน้า) · “มีฝน” = ≥ 1 มม. ในช่วงนั้น</p>
         <div class="chips" id="u-wins" role="tablist" aria-label="ช่วงเวลา"></div>
         <div class="v-summary" id="u-summary" role="status"></div>
         <div class="table-wrap" id="u-table"></div>
@@ -152,10 +152,10 @@
       <!-- แผนภาพ: เปรียบเทียบอย่างไร -->
       <div class="v-how" aria-label="วิธีเปรียบเทียบ">
         <ol class="v-steps">
-          <li><span class="v-ico">🖥️</span><b>1. เก็บพยากรณ์ไว้ก่อน</b><span>ทุกชั่วโมงระบบบันทึกว่าแต่ละโมเดล “ทายไว้ว่าอะไร”</span></li>
-          <li><span class="v-ico">⏳</span><b>2. รอให้วันจริงมาถึง</b><span>ช่วงล่วงหน้านับเป็น T+ ชม. จาก “รอบรัน” ของโมเดล (มาตรฐาน WMO)</span></li>
-          <li><span class="v-ico">🌧️</span><b>3. ดูค่าที่วัดได้จริง</b><span>จากสถานีอุตุฯ เครื่องวัดฝน หรือคนที่กดแจ้ง</span></li>
-          <li><span class="v-ico">✅</span><b>4. ให้คะแนน</b><span>ทายถูกไหม ทายเกินหรือขาดไปเท่าไร</span></li>
+          <li><span class="v-ico">🖥️</span><b>1. จัดเก็บผลพยากรณ์</b><span>บันทึกผลพยากรณ์ของทุกแบบจำลองทุกชั่วโมง</span></li>
+          <li><span class="v-ico">⏳</span><b>2. กำหนดระยะล่วงหน้า</b><span>นับเป็น T+ ชม. จากรอบการประมวลผลของแบบจำลอง (ตามแนวทาง WMO)</span></li>
+          <li><span class="v-ico">🌧️</span><b>3. ค่าตรวจวัดอ้างอิง</b><span>สถานีอุตุนิยมวิทยา เครื่องวัดฝนโทรมาตร และรายงานจากผู้ใช้</span></li>
+          <li><span class="v-ico">✅</span><b>4. คำนวณดัชนีความถูกต้อง</b><span>ตาราง contingency และค่าความคลาดเคลื่อน</span></li>
         </ol>
         <div class="v-tl" role="img" aria-label="ตัวอย่าง: รอบรัน 00 UTC (07:00 น.) ทายฝนวันพรุ่งนี้ 07:00 ถึง 07:00 = Day 1">
           <div class="tl-node"><span class="tl-dot"></span><b>รอบรัน (init)</b><small>00 UTC = 07:00 น.</small></div>
@@ -164,7 +164,7 @@
         </div>
       </div>
 
-      <h3 class="v-h3">เลือกว่าจะเทียบกับอะไร</h3>
+      <h3 class="v-h3">เลือกแหล่งค่าตรวจวัดอ้างอิง</h3>
       <div class="v-sources" id="v-sources" role="tablist" aria-label="แหล่งค่าวัดจริง"></div>
       <div class="v-controls">
         <div class="chips" id="v-vars" role="tablist" aria-label="ตัวแปร"></div>
@@ -173,25 +173,25 @@
 
       <div class="v-summary" id="v-summary" role="status"></div>
       <div class="table-wrap" id="v-table"></div>
-      <details class="v-more"><summary>รายละเอียดคะแนนเชิงเทคนิค + ensemble</summary>
+      <details class="v-more"><summary>ดัชนีเชิงเทคนิคทั้งหมดและผลของระบบ ensemble</summary>
         <div class="table-wrap" id="v-table-full"></div>
         <div class="table-wrap v-ens" id="v-ens"></div>
       </details>
       <p class="note" id="v-note"></p>
 
       <details class="v-help" open>
-        <summary>ให้คะแนนอย่างไร</summary>
+        <summary>วิธีคำนวณดัชนีความถูกต้อง</summary>
         <div class="v-matrix" aria-label="ตารางการให้คะแนนฝน">
-          <div></div><div class="vm-h">ฝนตกจริง 🌧️</div><div class="vm-h">ไม่ตกจริง ☀️</div>
-          <div class="vm-h">โมเดลทายว่าตก</div><div class="vm good">✅ ถูก<small>(จับฝนได้)</small></div><div class="vm bad">⚠️ เตือนเกิน<small>(ทายตกแต่ไม่ตก)</small></div>
-          <div class="vm-h">โมเดลทายว่าไม่ตก</div><div class="vm bad">❌ พลาด<small>(ฝนตกแต่ไม่ได้เตือน)</small></div><div class="vm good">✅ ถูก<small>(ไม่ตกตามที่ทาย)</small></div>
+          <div></div><div class="vm-h">เกิดฝนจริง 🌧️</div><div class="vm-h">ไม่เกิดฝน ☀️</div>
+          <div class="vm-h">พยากรณ์ว่ามีฝน</div><div class="vm good">✅ Hit<small>(พยากรณ์ถูก)</small></div><div class="vm bad">⚠️ False alarm<small>(เตือนแต่ไม่เกิด)</small></div>
+          <div class="vm-h">พยากรณ์ว่าไม่มีฝน</div><div class="vm bad">❌ Miss<small>(เกิดแต่ไม่ได้เตือน)</small></div><div class="vm good">✅ Correct negative<small>(ไม่เกิดตามพยากรณ์)</small></div>
         </div>
         <ul>
-          <li><b>คะแนนทายฝน</b> (CSI) = จำนวน “✅ จับฝนได้” ÷ (จับได้ + พลาด + เตือนเกิน) — ไม่นับวันที่ไม่ตกทั้งคู่ จึงวัดความเก่งเรื่องฝนจริง ๆ (0–100, ยิ่งสูงยิ่งดี)</li>
-          <li><b>ทายถูก %</b> = ถูกทั้งสองแบบ ÷ ทั้งหมด — ในช่วงแล้งอาจสูงเกินจริง เพราะทายว่า “ไม่ตก” ตลอดก็ถูกเกือบทุกวัน</li>
-          <li><b>นิสัยของโมเดล</b> — ทายฝนบ่อยเกิน (เตือนเกินบ่อย) / พอดี / ทายฝนน้อยเกิน (พลาดบ่อย)</li>
-          <li>อุณหภูมิ: <b>คลาดเฉลี่ย</b> (°C) ยิ่งน้อยยิ่งดี และบอกว่ามักทาย <b>สูงไป</b> หรือ <b>ต่ำไป</b></li>
-          <li>จัดอันดับแยกตามช่วงล่วงหน้า เพราะโมเดลพยากรณ์ได้ไกลไม่เท่ากัน · ถ้าจำนวนครั้งยังน้อย (<30) ผลยังไม่นิ่ง</li>
+          <li><b>Critical Success Index (CSI)</b> = Hit ÷ (Hit + Miss + False alarm) — ไม่รวมกรณี Correct negative จึงสะท้อนทักษะการพยากรณ์เหตุการณ์ฝนโดยตรง (0–100 ค่าสูงดีกว่า)</li>
+          <li><b>ความถูกต้องรวม (accuracy)</b> = (Hit + Correct negative) ÷ ทั้งหมด — ในฤดูแล้งค่านี้อาจสูงเกินจริง เนื่องจากการพยากรณ์ว่าไม่มีฝนถูกต้องเกือบทุกวัน</li>
+          <li><b>Frequency bias</b> — มากกว่า 1 = พยากรณ์เหตุการณ์ฝนบ่อยเกิน · น้อยกว่า 1 = พยากรณ์น้อยเกิน</li>
+          <li>อุณหภูมิ: <b>MAE</b> (ค่าคลาดเคลื่อนสัมบูรณ์เฉลี่ย, °C) ค่าน้อยดีกว่า · <b>bias</b> แสดงแนวโน้มพยากรณ์สูงหรือต่ำกว่าค่าจริง · <b>RMSE</b> ให้น้ำหนักกับความคลาดเคลื่อนขนาดใหญ่</li>
+          <li>จัดอันดับแยกตามระยะล่วงหน้า เนื่องจากแบบจำลองมีระยะพยากรณ์ไม่เท่ากัน · หากขนาดตัวอย่างน้อยกว่า 30 ผลยังไม่มีเสถียรภาพทางสถิติ</li>
         </ul>
         <div id="v-points"></div>
       </details>
@@ -199,7 +199,7 @@
       </div>
 
       <details class="v-help">
-        <summary>⏱️ กรอบเวลาแบบสากล: นับ “ล่วงหน้า” อย่างไร</summary>
+        <summary>⏱️ กรอบเวลามาตรฐาน: การนับระยะล่วงหน้า</summary>
         <ul>
           <li>โมเดลไม่ได้คำนวณใหม่ทุกชั่วโมง แต่รันเป็น <b>รอบ (init / cycle)</b> ที่ 00, 06, 12, 18 UTC (= 07:00, 13:00, 19:00, 01:00 น.) บางโมเดลวันละ 2 รอบ
             และผลออกมาหลังเริ่มรัน 3–10 ชม. ดังนั้นพยากรณ์ที่ “ดึงมาตอนนี้” อาจเป็นของรอบเมื่อหลายชั่วโมงก่อน (ดูตาราง “⑤ รอบรันของแต่ละโมเดล” ด้านบน)</li>
@@ -215,9 +215,9 @@
       </details>
 
       <details class="v-help">
-        <summary>🗂️ ข้อมูลมาจากไหน ช่วงไหน เก็บอย่างไร</summary>
+        <summary>🗂️ แหล่งข้อมูล ช่วงเวลา และวิธีการจัดเก็บ</summary>
         <div class="table-wrap"><table class="about-table prov">
-          <thead><tr><th>ข้อมูล</th><th>แหล่ง</th><th>ช่วงเวลา</th><th>เก็บอย่างไร</th></tr></thead>
+          <thead><tr><th>ข้อมูล</th><th>แหล่งข้อมูล</th><th>ช่วงเวลา</th><th>วิธีการจัดเก็บ</th></tr></thead>
           <tbody>
             <tr><td>พยากรณ์โมเดลระดับโลก + ensemble</td><td>Open-Meteo API (ECMWF, NOAA, DWD, ECCC, JMA, Météo-France, UKMO, CMA, KMA, BOM)</td>
                 <td>ตั้งแต่ <span class="prov-since">27 ก.ย. 2569</span> → ปัจจุบัน</td><td>ประมาณทุกชั่วโมง ผ่าน GitHub Actions (สั่งโดย cron-job.org + ตารางของ GitHub) · เก็บทุกรอบที่ดึงเป็นไฟล์ csv.gz พร้อม “รอบรัน” ของแต่ละโมเดล (.runs.json) ใน branch <code>data</code></td></tr>
@@ -258,34 +258,35 @@
     </section>
 
     <section id="about" aria-labelledby="h-about">
-      <h2 id="h-about">ℹ️ เกี่ยวกับโครงการ</h2>
+      <h2 id="h-about">ℹ️ เกี่ยวกับระบบ</h2>
 
       <div class="about-hero">
-        <p>เว็บนี้<b>รวมพยากรณ์อากาศจากหลายแหล่งทั่วโลกและของไทยไว้ในที่เดียว</b> แล้ว<b>ตรวจย้อนหลังด้วยค่าที่วัดได้จริงในประเทศไทย</b>
-          เพื่อตอบคำถามง่าย ๆ ว่า <i>“ฝนจะตกไหม และควรเชื่อพยากรณ์ของใคร สำหรับพื้นที่ของเรา”</i></p>
+        <p>ระบบนี้<b>รวบรวมผลพยากรณ์จากแบบจำลองเชิงตัวเลขของหน่วยงานระดับโลกและของประเทศไทยไว้ในกรอบเดียวกัน</b> และ<b>ตรวจสอบความถูกต้องย้อนหลังกับค่าตรวจวัดในประเทศไทยอย่างต่อเนื่อง</b>
+          เพื่อตอบคำถามวิจัยว่า <i>“แบบจำลองใดให้ผลพยากรณ์ฝน อุณหภูมิ และภัยความร้อนที่ถูกต้องที่สุดสำหรับพื้นที่ศึกษา และมีความไม่แน่นอนเพียงใด”</i>
+          ระบบนี้เป็นขั้นตอนหนึ่งของโครงการวิจัย HEAT-SAFE Bangkok (วช. 2570) ในส่วนการพยากรณ์และการตรวจสอบข้อมูลอุตุนิยมวิทยา</p>
         <p class="muted" id="about-stats"></p>
       </div>
 
-      <h3>🎯 เป้าหมาย</h3>
+      <h3>🎯 วัตถุประสงค์</h3>
       <div class="cards">
-        <article class="card"><h4>1. เห็นหลายความเห็นพร้อมกัน</h4>
-          <p>12 โมเดลคำนวณคนละวิธี ถ้าส่วนใหญ่เห็นตรงกันก็มั่นใจได้มากขึ้น ถ้าต่างกันมาก แปลว่ายังไม่แน่นอน ควรดู “โอกาสฝน” จาก ensemble 7 ระบบประกอบ</p></article>
-        <article class="card"><h4>2. บอกว่าเชื่อได้แค่ไหน</h4>
-          <p>ทุกการ์ดพยากรณ์มีป้าย “📊 ที่ผ่านมา: บอกว่าตก → ตกจริง x/10” คำนวณจากการเทียบพยากรณ์ที่ออก <b>ก่อน</b> เหตุการณ์กับค่าที่วัดได้จริง ในช่วงเวลาเดียวกับที่หน้าเว็บแสดง</p></article>
-        <article class="card"><h4>3. เน้นฝนในเมือง</h4>
-          <p>ฝนฟ้าคะนองในเมืองต่างกันมากในระยะไม่กี่กิโลเมตร จึงใส่โมเดลละเอียดสูง (TMD WRF 2 กม., HII 3 กม., Google ~5 กม.) และเทียบกับเครื่องวัดฝนทุกเครื่องในเขตเมืองของ กทม. และปริมณฑล</p></article>
+        <article class="card"><h4>1. การพยากรณ์แบบหลายแบบจำลอง</h4>
+          <p>แบบจำลอง 12 ระบบใช้วิธีเชิงฟิสิกส์และปัญญาประดิษฐ์ที่แตกต่างกัน ความสอดคล้องระหว่างแบบจำลองบ่งชี้ความเชื่อมั่น ส่วนการกระจายของผลบ่งชี้ความไม่แน่นอน ซึ่งพิจารณาร่วมกับความน่าจะเป็นจากระบบ ensemble 7 ระบบ</p></article>
+        <article class="card"><h4>2. การประเมินความน่าเชื่อถือ</h4>
+          <p>ผลพยากรณ์แต่ละรายการแสดงสถิติความน่าเชื่อถือย้อนหลัง ซึ่งคำนวณจากการเทียบผลพยากรณ์ที่เผยแพร่ <b>ก่อน</b> เหตุการณ์กับค่าตรวจวัด ในช่วงเวลาเดียวกับที่แสดงบนหน้าเว็บ</p></article>
+        <article class="card"><h4>3. ฝนและความร้อนในเขตเมือง</h4>
+          <p>ฝนฟ้าคะนองและความร้อนในเขตเมืองมีความแปรปรวนเชิงพื้นที่สูง ระบบจึงรวมแบบจำลองความละเอียดสูง (TMD WRF 2 กม., HII 3 กม., Google ~5 กม.) ตรวจสอบกับเครื่องวัดฝนทุกเครื่องในเขตเมืองของกรุงเทพมหานครและปริมณฑล และจัดทำพยากรณ์ดัชนีความร้อนรายเขต</p></article>
       </div>
 
-      <h3>⚙️ ทำงานอย่างไร (อัตโนมัติ ประมาณทุกชั่วโมง)</h3>
+      <h3>⚙️ กระบวนการทำงาน (อัตโนมัติ ประมาณทุกชั่วโมง)</h3>
       <ol class="flow">
-        <li><b>ดึงพยากรณ์</b><span>12 โมเดล + ensemble 7 ระบบ (Open-Meteo), TMD WRF, Google Weather (เฉพาะ กทม.), HII WRF-ROMS (วันละรอบ) พร้อมบันทึก “รอบรัน” ของแต่ละโมเดล</span></li>
-        <li><b>เก็บทุกรอบ</b><span>เก็บพยากรณ์ทุกครั้งที่ดึงไว้ใน GitHub เพื่อรู้ว่าเคยทายไว้อย่างไร</span></li>
-        <li><b>เก็บค่าวัดจริง</b><span>สถานีอุตุฯ ~124 แห่ง (ราย 3 ชม. + สรุป 07 น.), โทรมาตร ThaiWater ~4,300 เครื่อง (ฝน 24 ชม. และรายชั่วโมงที่จุดตรวจ), PM2.5, การแจ้งจากผู้ใช้</span></li>
-        <li><b>จับคู่และให้คะแนน</b><span>พยากรณ์ที่ออกก่อน ↔ ค่าที่วัดได้ในช่วงเดียวกัน ทั้งแบบมุมผู้ใช้และแบบมาตรฐาน WMO</span></li>
-        <li><b>แสดงผล</b><span>หน้าเว็บ (GitHub Pages) อัปเดตทุกรอบ · สั่งรันโดย cron-job.org ทุกชั่วโมง + ตารางของ GitHub สำรอง</span></li>
+        <li><b>รวบรวมผลพยากรณ์</b><span>แบบจำลอง 12 ระบบและ ensemble 7 ระบบ (Open-Meteo), TMD WRF, Google Weather (เฉพาะกรุงเทพมหานคร), HII WRF-ROMS (วันละรอบ) พร้อมบันทึกรอบการประมวลผล</span></li>
+        <li><b>จัดเก็บถาวร</b><span>จัดเก็บผลพยากรณ์ทุกรอบไว้ใน GitHub เพื่อใช้ตรวจสอบย้อนหลัง</span></li>
+        <li><b>รวบรวมค่าตรวจวัด</b><span>สถานีอุตุนิยมวิทยา ~124 แห่ง (ราย 3 ชม. และสรุป 07:00 น.), โทรมาตร ThaiWater ~4,300 เครื่อง (ฝน 24 ชม. และรายชั่วโมง ณ จุดตรวจสอบ), PM2.5 และรายงานจากผู้ใช้</span></li>
+        <li><b>ตรวจสอบความถูกต้อง</b><span>จับคู่ผลพยากรณ์ที่เผยแพร่ก่อนเหตุการณ์กับค่าตรวจวัดในช่วงเดียวกัน ทั้งในมุมมองผู้ใช้งานและตามมาตรฐาน WMO</span></li>
+        <li><b>เผยแพร่</b><span>หน้าเว็บ (GitHub Pages) ปรับปรุงทุกรอบ · ควบคุมรอบการทำงานด้วย cron-job.org โดยมีตารางเวลาของ GitHub เป็นระบบสำรอง</span></li>
       </ol>
 
-      <h3>🧭 อ่านหน้าเว็บตามลำดับ</h3>
+      <h3>🧭 ลำดับเนื้อหาของหน้าเว็บ</h3>
       <ul class="about-list">
         <li><b>📍 ตรงที่ฉันอยู่</b> (ค่าเริ่มต้น) — พยากรณ์ตรงพิกัดของคุณ · แท็บ <b>กรุงเทพมหานคร</b> มี TMD WRF และ Google เพิ่ม</li>
         <li><b>① ตอนนี้</b> — ค่าวัดจากสถานีใกล้สุด, PM2.5, แผนที่เรดาร์ฝน + สถานีวัดทุกเครื่อง (เลือกชั้นข้อมูลตามหน่วยงานได้)</li>
@@ -293,12 +294,12 @@
         <li><b>③–⑤</b> (กดเปิดดู) — แยกทีละโมเดล, กราฟรายชั่วโมง, รอบรันของแต่ละโมเดล และ 🏆 โมเดลไหนแม่น</li>
       </ul>
 
-      <h3>⚖️ เอาอะไรไปเทียบกับอะไร</h3>
-      <p>มี 2 มุมมอง ใช้ค่าวัดชุดเดียวกัน แต่ตอบคนละคำถาม</p>
+      <h3>⚖️ กรอบการตรวจสอบความถูกต้อง</h3>
+      <p>การตรวจสอบมี 2 มุมมอง ใช้ค่าตรวจวัดชุดเดียวกัน แต่ตอบคำถามต่างกัน</p>
       <div class="table-wrap"><table class="about-table">
-        <thead><tr><th></th><th>👤 สำหรับผู้ใช้ทั่วไป (ค่าเริ่มต้น)</th><th>🔬 มาตรฐาน WMO (งานวิจัย)</th></tr></thead>
+        <thead><tr><th></th><th>👤 มุมมองผู้ใช้งาน (ค่าเริ่มต้น)</th><th>🔬 มาตรฐาน WMO (งานวิจัย)</th></tr></thead>
         <tbody>
-          <tr><td><b>คำถาม</b></td><td>เปิดเว็บแล้วเห็นว่าฝนจะตก เชื่อได้แค่ไหน</td><td>โมเดลไหนเก่งกว่า เมื่อทายล่วงหน้าเท่ากัน</td></tr>
+          <tr><td><b>คำถาม</b></td><td>ผลพยากรณ์ที่แสดงบนหน้าเว็บน่าเชื่อถือเพียงใด</td><td>แบบจำลองใดมีทักษะสูงกว่าเมื่อเปรียบเทียบที่ระยะล่วงหน้าเท่ากัน</td></tr>
           <tr><td><b>ช่วงเวลา</b></td><td>เหมือนหน้าเว็บ: +3, +6, +12, +24 ชม., พรุ่งนี้, D+3, D+7 นับจากเวลาที่ดึงพยากรณ์</td>
               <td>T+ ชม. นับจากรอบรันของโมเดล · Day N = ฝน 07–07 น. (00–00 UTC) · ส่วนทั่วประเทศใช้ “ทายไว้ล่วงหน้า ≥ 24/72/168 ชม.”</td></tr>
           <tr><td><b>สิ่งที่ให้คะแนน</b></td><td>ทุกโมเดล + ค่ากลางทุกโมเดล + โอกาสฝน % (รวมความช้าในการส่งผลของแต่ละโมเดล)</td><td>ทีละโมเดล</td></tr>
@@ -309,11 +310,11 @@
       <p class="note">“ฝนตก”: มุมผู้ใช้ ≥ 1 มม. ในช่วงนั้น · WMO ≥ 0.2 มม. ใน 3 ชม. หรือ ≥ 1 มม. ต่อวัน ·
         เขตเมือง = ความหนาแน่นประชากร ≥ 1,500 คน/ตร.กม. (WorldPop 2020) · รายละเอียดดู “⏱️ กรอบเวลาแบบสากล” และ “🗂️ ข้อมูลมาจากไหน” ในส่วน ⑤</p>
 
-      <h3>🧠 โมเดลที่ใช้ <small>เรียงจากละเอียดไปหยาบ</small></h3>
+      <h3>🧠 แบบจำลองที่ใช้ <small>เรียงตามความละเอียดเชิงพื้นที่</small></h3>
       <div class="table-wrap" id="about-models"></div>
-      <p class="note">ensemble = รันโมเดลเดียวกันหลายสิบครั้งโดยเปลี่ยนสภาพตั้งต้นเล็กน้อย ใช้คิด “โอกาสฝน (%)” · <span id="about-ens"></span></p>
+      <p class="note">ensemble = การประมวลผลแบบจำลองเดียวกันหลายสิบครั้งโดยรบกวนสภาวะเริ่มต้นเล็กน้อย ใช้ประมาณความน่าจะเป็น (%) · <span id="about-ens"></span></p>
 
-      <h3>📏 อ่านคะแนนอย่างไร</h3>
+      <h3>📏 การตีความดัชนี</h3>
       <ul class="about-list">
         <li><b>บอกว่าตก → ตกจริง x/10</b> — ถ้าเว็บ/โมเดลบอกว่าฝนตก ตกจริงกี่ใน 10 ครั้ง (ความน่าเชื่อเมื่อเตือน)</li>
         <li><b>ฝนตก → เตือนไว้ y/10</b> — ถ้าฝนตกจริง ได้เตือนไว้ก่อนกี่ใน 10 ครั้ง (จับฝนได้, เท่ากับ POD)</li>
@@ -366,7 +367,7 @@
       คุณภาพอากาศ <a href="https://atmosphere.copernicus.eu/" target="_blank" rel="noopener">CAMS</a> ·
       ค่าวัดจริง: <a href="https://data.tmd.go.th/" target="_blank" rel="noopener">สถานีกรมอุตุฯ</a>, <a href="http://air4thai.pcd.go.th/" target="_blank" rel="noopener">Air4Thai (คพ.)</a> ·
       เรดาร์ <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a></p>
-    <p>พยากรณ์เป็นค่าจากแบบจำลองคอมพิวเตอร์ ไม่ใช่ประกาศทางการ · <a id="docs-link" target="_blank" rel="noopener">หลักการของแต่ละโมเดล</a> · <a id="repo-link" target="_blank" rel="noopener">โค้ด</a></p>
+    <p>ผลพยากรณ์เป็นผลจากแบบจำลองเชิงตัวเลข มิใช่ประกาศอย่างเป็นทางการ · <a id="docs-link" target="_blank" rel="noopener">หลักการของแต่ละแบบจำลอง</a> · <a id="repo-link" target="_blank" rel="noopener">รหัสต้นฉบับ</a></p>
   </footer>
 
   <div id="tooltip" class="tooltip" role="status" hidden></div>

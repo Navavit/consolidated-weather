@@ -608,13 +608,13 @@ def ensemble_probability(ensembles, now, cfg=None):
 
 
 def heat_level(t):
-    """ระดับดัชนีความร้อนตามเกณฑ์กรมควบคุมโรค"""
+    """ระดับตามเกณฑ์แจ้งเตือนภัยความร้อนของกรุงเทพมหานคร (สอดคล้องกรมอนามัย): เขียว/เหลือง/ส้ม/แดง"""
     if pd.isna(t):  return "–"
-    if t < 27:      return "🟢 ปกติ"
-    if t < 33:      return "🟡 เฝ้าระวัง"
-    if t < 42:      return "🟠 เตือนภัย"
-    if t < 52:      return "🔴 อันตราย"
-    return "🟣 อันตรายมาก"
+    if t < 27:      return "⚪ ต่ำกว่าเกณฑ์"
+    if t < 33:      return "🟢 เฝ้าระวัง"
+    if t < 42:      return "🟡 เตือนภัย"
+    if t < 52:      return "🟠 อันตราย"
+    return "🔴 อันตรายมาก"
 
 
 def uv_level(u):

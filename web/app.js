@@ -1,4 +1,4 @@
-/* เทียบพยากรณ์อากาศหลายโมเดล — หน้าเว็บ static อ่าน data/*.json ที่ GitHub Actions สร้างทุกชั่วโมง */
+/* ระบบเปรียบเทียบและตรวจสอบพยากรณ์อากาศหลายแบบจำลอง — หน้าเว็บ static อ่าน data/*.json ที่ GitHub Actions สร้างทุกชั่วโมง */
 "use strict";
 
 // ---------------------------------------------------------------------------
@@ -10,19 +10,19 @@ const BLUE = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", 
 const RAIN_STEPS = [0.1, 0.5, 1, 2, 5, 10, 15, 20, 30, 50, 75, 100];      // มม. → ขั้นของ ramp
 const PROB_STEPS = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100];      // %
 const STATUS = {
-  "ปกติ": "good", "เฝ้าระวัง": "warning", "เตือนภัย": "serious", "อันตราย": "critical", "อันตรายมาก": "critical",
+  "ปกติ": "good", "ต่ำกว่าเกณฑ์": "", "เฝ้าระวัง": "good", "เตือนภัย": "warning", "อันตราย": "serious", "อันตรายมาก": "critical",
   "ต่ำ": "good", "ปานกลาง": "warning", "สูง": "serious", "สูงมาก": "critical",
   "ดีมาก": "good", "ดี": "good", "เริ่มมีผลต่อสุขภาพ": "serious", "มีผลต่อสุขภาพ": "critical",
 };
 const CHARTS = [
   { key: "precipitation", title: "ฝนรายชั่วโมง", unit: "มม./ชม.", bars: true, zero: true, wide: true, height: 220 },
   { key: "temperature_2m", title: "อุณหภูมิ", unit: "°C" },
-  { key: "apparent_temperature", title: "อุณหภูมิที่รู้สึก", unit: "°C",
-    lines: [{ y: 33, label: "เตือนภัย 33", status: "serious" }, { y: 42, label: "อันตราย 42", status: "critical" }] },
+  { key: "apparent_temperature", title: "อุณหภูมิปรากฏ (apparent temperature)", unit: "°C",
+    lines: [{ y: 33, label: "เหลือง 33", status: "warning" }, { y: 42, label: "ส้ม 42", status: "serious" }, { y: 52, label: "แดง 52", status: "critical" }] },
   { key: "relative_humidity_2m", title: "ความชื้นสัมพัทธ์", unit: "%", max: 100 },
   { key: "wind_gusts_10m", title: "ลมกระโชก", unit: "กม./ชม.", zero: true },
   { key: "pm25", title: "PM2.5 (CAMS)", unit: "มคก./ลบ.ม.", zero: true, single: true,
-    lines: [{ y: 37.5, label: "มาตรฐาน 37.5", status: "serious" }] },
+    lines: [{ y: 37.5, label: "ค่ามาตรฐาน 37.5", status: "serious" }] },
 ];
 const DAYS = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
 
@@ -123,7 +123,7 @@ async function init() {
   try {
     state.index = await getJSON("data/index.json");
   } catch (e) {
-    $("updated").textContent = "ยังไม่มีข้อมูล — รอ GitHub Actions รันรอบแรก";
+    $("updated").textContent = "ยังไม่มีข้อมูล — รอการประมวลผลรอบแรกของ GitHub Actions";
     return;
   }
   const repo = state.index.repo;
@@ -134,7 +134,7 @@ async function init() {
   } else {
     $("edit-loc").hidden = true;
   }
-  $("updated").textContent = `อัปเดต ${timeAgo(state.index.generated)} · ${new Date(state.index.generated).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}`;
+  $("updated").textContent = `ปรับปรุงล่าสุด ${timeAgo(state.index.generated)} · ${new Date(state.index.generated).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}`;
   const wantAbout = location.hash === "#about";
   const wantHeat = location.hash === "#heat";
   initFolds();     // อ่านก่อน เพราะการเลือกตำแหน่งจะล้าง hash
@@ -144,7 +144,7 @@ async function init() {
     if (state.loc) { renderNext(); renderBrief(); }
     if (document.body.classList.contains("about-mode")) showAbout(true);
   }).catch(() => {
-    $("v-note").textContent = "ยังไม่มีข้อมูล — ระบบเริ่มเก็บค่าวัดจากสถานีแล้ว ผลจะเริ่มแสดงในไม่กี่ชั่วโมง";
+    $("v-note").textContent = "ยังไม่มีข้อมูล — ระบบเริ่มรวบรวมค่าตรวจวัดแล้ว ผลการตรวจสอบจะแสดงภายในไม่กี่ชั่วโมง";
   });
   state.meta = await getJSON("data/meta.json").catch(() => null);
   // ค่าเริ่มต้น = 📍 ตรงที่ฉันอยู่ · แสดงตำแหน่งแรกไปก่อนระหว่างรออนุญาตตำแหน่ง/คำนวณ (ถ้า GPS ใช้ไม่ได้ก็ค้างที่ตำแหน่งแรก)
@@ -186,14 +186,14 @@ function applyTheme(theme) {
 function renderChips() {
   $("locations").replaceChildren(
     el("button", { class: "chip", id: "gps-chip", role: "tab", type: "button", "aria-selected": String(state.locIdx === -1),
-      onclick: () => selectGps() }, "📍 ตรงที่ฉันอยู่"),
+      onclick: () => selectGps() }, "📍 ตำแหน่งของผู้ใช้"),
     ...state.index.locations.map((l, i) =>
       el("button", { class: "chip", role: "tab", type: "button", "data-idx": String(i), "aria-selected": String(i === state.locIdx),
         onclick: () => selectLocation(i) }, l.name)),
     el("button", { class: "chip", id: "heat-chip", role: "tab", type: "button", "aria-selected": "false",
       onclick: () => showHeat(true) }, "🌡️ ภัยความร้อนรายเขต"),
     el("button", { class: "chip", id: "about-chip", role: "tab", type: "button", "aria-selected": "false",
-      onclick: () => showAbout(true) }, "ℹ️ เกี่ยวกับโครงการ"));
+      onclick: () => showAbout(true) }, "ℹ️ เกี่ยวกับระบบ"));
 }
 function markChips() {
   const about = document.body.classList.contains("about-mode");
@@ -231,18 +231,18 @@ async function showAbout(on) {
     const avail = new Set((locData?.models || []).map((m) => m.name));
     const TYPE_TH = { "AI/ML": "AI", "Physics": "ฟิสิกส์", "Physics (regional)": "ฟิสิกส์ (ภูมิภาค)" };
     $("about-models").replaceChildren(el("table", { class: "about-table" },
-      el("thead", {}, el("tr", {}, ...["โมเดล", "ผู้พัฒนา", "ประเภท", "ความละเอียด"].map((h) => el("th", {}, h)))),
+      el("thead", {}, el("tr", {}, ...["แบบจำลอง", "หน่วยงานผู้พัฒนา", "ประเภท", "ความละเอียดเชิงพื้นที่"].map((h) => el("th", {}, h)))),
       el("tbody", {}, rows.map((m) => el("tr", {},
         el("td", {}, el("b", {}, m.name), avail.size && !avail.has(m.name) ? el("div", { class: "muted" }, "ขณะนี้ไม่มีข้อมูล") : null),
         el("td", {}, m.agency || ""),
         el("td", {}, TYPE_TH[m.type] || m.type || ""),
         el("td", {}, m.grid_km ? `~${m.grid_km} กม. ` : "", el("small", {}, m.grid || "")))))));
-    $("about-ens").textContent = "ensemble ที่ใช้: " + M.ensembles.map((e) => `${e.name} (${e.members})`).join(", ");
+    $("about-ens").textContent = "ระบบ ensemble ที่ใช้: " + M.ensembles.map((e) => `${e.name} (${e.members})`).join(", ");
   }
   const V = state.verify;
   const n = V ? V.sections.reduce((a, x) => a + (x.n_obs || 0), 0) : 0;
-  $("about-stats").textContent = `อัปเดตอัตโนมัติทุกชั่วโมง · เริ่มเก็บข้อมูล ${V?.since || "–"} · ` +
-    `เทียบกับค่าวัดจริงแล้ว ${n.toLocaleString("th-TH")} ครั้ง · ใช้งานอยู่ ${state.aboutLoc ? state.aboutLoc.models.length : "–"} โมเดล + ${M ? M.ensembles.length : "–"} ensemble`;
+  $("about-stats").textContent = `ปรับปรุงอัตโนมัติทุกชั่วโมง · เริ่มรวบรวมข้อมูล ${V?.since || "–"} · ` +
+    `จำนวนคู่พยากรณ์–ค่าตรวจวัด ${n.toLocaleString("th-TH")} คู่ · แบบจำลองที่ใช้งาน ${state.aboutLoc ? state.aboutLoc.models.length : "–"} ระบบ และ ensemble ${M ? M.ensembles.length : "–"} ระบบ`;
 }
 
 async function selectLocation(i, remember = true) {
@@ -278,7 +278,7 @@ function showLocation() {
   if (i === -1 && state.map) {
     state.gpsMarker = L.circleMarker([state.loc.lat, state.loc.lon], {
       radius: 10, color: cssVar("--ink"), weight: 3, fillColor: cssVar("--ink"), fillOpacity: 1,
-    }).bindTooltip("ตรงที่ฉันอยู่", { direction: "top", className: "map-label" }).addTo(state.map);
+    }).bindTooltip("ตำแหน่งของผู้ใช้", { direction: "top", className: "map-label" }).addTo(state.map);
   }
 }
 
@@ -337,11 +337,12 @@ const winHead = (w) => { const i = winInfo(w); return [i.top, i.sub ? el("span",
 function renderTimebase() {
   const L = state.loc, base = baseMs(L);
   $("timebase").textContent = base == null ? "" :
-    `⏱️ เวลาอ้างอิงของพยากรณ์ทั้งหน้า: ${dMon(base)} ${hhmmMs(base)} น. · “+N ชม.” นับจากเวลานี้ · 1 วัน = ${pad2(dayStart())}:00 → ${pad2(dayStart())}:00 น. (ตรงกับค่าวัดรายวันของกรมอุตุฯ) · ` +
-    `HII ใช้ 19:00 → 19:00 น. · ที่มาและรอบรันดูที่ ⑤`;
+    `⏱️ เวลาอ้างอิงของผลพยากรณ์ในหน้านี้: ${dMon(base)} ${hhmmMs(base)} น. · “+N ชม.” นับจากเวลานี้ · 1 วันอุตุนิยมวิทยา = ${pad2(dayStart())}:00 → ${pad2(dayStart())}:00 น. (สอดคล้องกับค่าตรวจวัดรายวันของกรมอุตุนิยมวิทยา) · ` +
+    `HII ใช้ช่วง 19:00 → 19:00 น. · แหล่งที่มาและรอบการประมวลผลดูที่ ⑤`;
 }
 
-const HEAT_LV = [[27, "🟢 ปกติ"], [33, "🟡 เฝ้าระวัง"], [42, "🟠 เตือนภัย"], [52, "🔴 อันตราย"], [Infinity, "🟣 อันตรายมาก"]];
+// ระดับตามเกณฑ์แจ้งเตือนภัยความร้อนของกรุงเทพมหานคร (สอดคล้องกรมอนามัย)
+const HEAT_LV = [[27, "⚪ ต่ำกว่าเกณฑ์"], [33, "🟢 เฝ้าระวัง"], [42, "🟡 เตือนภัย"], [52, "🟠 อันตราย"], [Infinity, "🔴 อันตรายมาก"]];
 const UV_LV = [[3, "🟢 ต่ำ"], [6, "🟡 ปานกลาง"], [8, "🟠 สูง"], [11, "🔴 สูงมาก"], [Infinity, "🟣 อันตราย"]];
 const PM_LV = [[15.01, "🔵 ดีมาก"], [25.01, "🟢 ดี"], [37.51, "🟡 ปานกลาง"], [75.01, "🟠 เริ่มมีผลต่อสุขภาพ"], [Infinity, "🔴 มีผลต่อสุขภาพ"]];
 function distKm(a, b, c, d) {
@@ -462,7 +463,7 @@ async function buildLocalPayload(lat, lon) {
     return best && bd <= M.max_station_km ? { ...best, dist_km: Math.round(bd * 10) / 10 } : null;
   };
   return {
-    name: "📍 ตรงที่ฉันอยู่", lat, lon, threshold_mm: thr, fetched_at: new Date(now).toISOString().slice(0, 19),
+    name: "📍 ตำแหน่งของผู้ใช้", lat, lon, threshold_mm: thr, fetched_at: new Date(now).toISOString().slice(0, 19),
     windows: wins.map((w) => w.label),
     models: Object.keys(data.precipitation).map((n) => ({ name: n, grid_km: (M.models.find((m) => m.name === n) || {}).grid_km })),
     tables, consensus, ensemble, brief,
@@ -477,12 +478,12 @@ async function selectGps(remember = true) {
   if (remember) store.set("tab", "gps");
   markChips();
   const chip = $("gps-chip");
-  if (!navigator.geolocation) { chip.textContent = "📍 เบราว์เซอร์นี้ไม่รองรับ GPS"; return; }
-  chip.textContent = "📍 กำลังหาตำแหน่ง…";
+  if (!navigator.geolocation) { chip.textContent = "📍 เบราว์เซอร์ไม่รองรับการระบุตำแหน่ง"; return; }
+  chip.textContent = "📍 กำลังระบุตำแหน่ง…";
   const pos = await new Promise((ok) => navigator.geolocation.getCurrentPosition(ok, () => ok(null),
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 5 * 60000 }));
-  if (!pos) { chip.textContent = "📍 เปิด GPS ไม่ได้ (อนุญาตตำแหน่งในเบราว์เซอร์)"; return; }
-  chip.textContent = "📍 กำลังคำนวณพยากรณ์…";
+  if (!pos) { chip.textContent = "📍 ระบุตำแหน่งไม่ได้ (โปรดอนุญาตการเข้าถึงตำแหน่งในเบราว์เซอร์)"; return; }
+  chip.textContent = "📍 กำลังประมวลผลพยากรณ์…";
   document.body.style.opacity = "0.6";
   try {
     const { latitude: lat, longitude: lon } = pos.coords;
@@ -491,9 +492,9 @@ async function selectGps(remember = true) {
     state.locIdx = -1;
     markChips();
     showLocation();
-    chip.textContent = `📍 ตรงที่ฉันอยู่ (${lat.toFixed(3)}, ${lon.toFixed(3)})`;
+    chip.textContent = `📍 ตำแหน่งของผู้ใช้ (${lat.toFixed(3)}, ${lon.toFixed(3)})`;
   } catch (e) {
-    chip.textContent = "📍 โหลดพยากรณ์ไม่ได้ ลองใหม่";
+    chip.textContent = "📍 ไม่สามารถโหลดผลพยากรณ์ โปรดลองใหม่";
   } finally {
     document.body.style.opacity = "";
   }
@@ -506,7 +507,7 @@ function bangkokNow() {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Bangkok" }).slice(0, 16);   // "YYYY-MM-DD HH:MM"
 }
 function reportTarget() {
-  if (state.gps) return { name: state.locIdx === -1 ? "ตรงที่ฉันอยู่ (GPS)" : "ตำแหน่ง GPS", lat: state.gps.lat, lon: state.gps.lon };
+  if (state.gps) return { name: state.locIdx === -1 ? "ตำแหน่งของผู้ใช้ (GPS)" : "ตำแหน่ง GPS", lat: state.gps.lat, lon: state.gps.lon };
   const l = state.index.locations[state.locIdx];
   return { name: l.name, lat: l.lat, lon: l.lon };
 }
@@ -543,8 +544,8 @@ function renderRainBar() {
   if (!state.gps) $("rb-gps").textContent = "📍 ใช้ GPS";
   const o = state.index.observations || { count: 0, recent: [] };
   const last = o.recent[0];
-  $("rb-hint").textContent = "กดแล้วจะเปิดฟอร์มบน GitHub ที่กรอกไว้ให้ → กด “Create” (หรือ Submit) เพื่อยืนยัน" +
-    (o.count ? ` · บันทึกแล้ว ${o.count} ครั้ง (ตก ${o.rain}) · ล่าสุด ${last.rained ? "🌧️" : "☀️"} ${last.location} ${last.obs_time.slice(5, 16)}` : "");
+  $("rb-hint").textContent = "ระบบจะเปิดแบบฟอร์มบน GitHub ที่กรอกข้อมูลไว้แล้ว → เลือก “Create” (หรือ Submit) เพื่อยืนยันการรายงาน" +
+    (o.count ? ` · รายงานแล้ว ${o.count} ครั้ง (มีฝน ${o.rain}) · ล่าสุด ${last.rained ? "🌧️" : "☀️"} ${last.location} ${last.obs_time.slice(5, 16)}` : "");
 }
 
 // ---------------------------------------------------------------------------
@@ -563,12 +564,12 @@ const currentCache = {};
 
 function stationCard(s) {
   if (!s) {
-    return el("article", { class: "card" }, el("h3", {}, "📡 วัดจริง (กรมอุตุฯ)"),
-      el("p", { class: "warn" }, "ไม่มีสถานีอุตุฯ ในรัศมี 60 กม."));
+    return el("article", { class: "card" }, el("h3", {}, "📡 ค่าตรวจวัด (กรมอุตุนิยมวิทยา)"),
+      el("p", { class: "warn" }, "ไม่มีสถานีอุตุนิยมวิทยาในรัศมี 60 กม."));
   }
   const age = (Date.now() - localTime(s.time).getTime()) / 3600000;
   return el("article", { class: "card" },
-    el("h3", {}, `📡 วัดจริง · สถานี${s.name}`),
+    el("h3", {}, `📡 ค่าตรวจวัด · สถานี${s.name}`),
     el("div", { class: "src" }, `ห่าง ${fmt(s.dist_km)} กม. · เวลา ${hhmm(s.time)} น. (อัปเดตทุก 3 ชม.)`),
     el("div", { class: "hero" }, fmt(s.temp), el("small", {}, " °C")),
     el("dl", { class: "kv" },
@@ -577,33 +578,33 @@ function stationCard(s) {
       el("dt", {}, "💧 ความชื้น"), el("dd", {}, `${fmt(s.rh, 0)} %`),
       el("dt", {}, "💨 ลม"), el("dd", {}, `${fmt(s.wind_kmh, 0)} กม./ชม. ${dirText(s.wind_dir)}`),
       el("dt", {}, "👁️ ทัศนวิสัย"), el("dd", {}, `${fmt(s.visibility_km, 0)} กม.`)),
-    s.dist_km > 20 ? el("p", { class: "warn" }, "ℹ️ สถานีอยู่ไกล ค่าอาจต่างจากจุดของคุณ โดยเฉพาะฝน") : null,
+    s.dist_km > 20 ? el("p", { class: "warn" }, "ℹ️ สถานีอยู่ห่างจากตำแหน่ง ค่าตรวจวัดอาจไม่เป็นตัวแทน โดยเฉพาะปริมาณฝน") : null,
     age > 4 ? el("p", { class: "warn" }, `⚠️ ข้อมูลเก่า ${Math.round(age)} ชม.`) : null);
 }
 
 function airCard(a) {
   if (!a) {
-    return el("article", { class: "card" }, el("h3", {}, "😷 PM2.5 วัดจริง (Air4Thai)"),
+    return el("article", { class: "card" }, el("h3", {}, "😷 PM2.5 ค่าตรวจวัด (Air4Thai)"),
       el("p", { class: "warn" }, "ไม่มีสถานีตรวจวัดในรัศมี 60 กม."));
   }
   return el("article", { class: "card" },
-    el("h3", {}, `😷 PM2.5 วัดจริง · ${a.name}`),
+    el("h3", {}, `😷 PM2.5 ค่าตรวจวัด · ${a.name}`),
     el("div", { class: "src" }, `ห่าง ${fmt(a.dist_km)} กม. · เวลา ${hhmm(a.time)} น. (รายชั่วโมง)`),
     el("div", { class: "hero" }, fmt(a.pm25), el("small", {}, " มคก./ลบ.ม."), " ", statusPill(a.level)),
     el("div", { class: "hero-sub" }, a.area || ""));
 }
 
 function modelCard(c) {
-  const card = el("article", { class: "card", id: "now-model" }, el("h3", {}, "🖥️ ตอนนี้จากโมเดล (Open-Meteo)"));
+  const card = el("article", { class: "card", id: "now-model" }, el("h3", {}, "🖥️ ค่าปัจจุบันจากแบบจำลอง (Open-Meteo)"));
   if (!c) { card.append(el("div", { class: "src" }, "กำลังโหลด…")); return card; }
   if (c.error) { card.append(el("p", { class: "warn" }, "โหลดไม่ได้")); return card; }
   card.append(
-    el("div", { class: "src" }, `เวลา ${hhmm(c.time)} น. · ค่าจากโมเดล (ไม่ใช่ค่าวัด) อัปเดตทุก 15 นาที`),
+    el("div", { class: "src" }, `เวลา ${hhmm(c.time)} น. · ค่าจากแบบจำลอง (มิใช่ค่าตรวจวัด) ปรับปรุงทุก 15 นาที`),
     el("div", { class: "hero" }, fmt(c.temperature_2m), el("small", {}, " °C")),
     el("div", { class: "hero-sub" }, WMO[c.weather_code] || `รหัสอากาศ ${c.weather_code}`),
     el("dl", { class: "kv" },
       el("dt", {}, "🌧️ ฝน 15 นาทีล่าสุด"), el("dd", {}, `${fmt(c.precipitation)} มม.`),
-      el("dt", {}, "🥵 รู้สึกเหมือน"), el("dd", {}, `${fmt(c.apparent_temperature, 0)} °C`),
+      el("dt", {}, "🥵 อุณหภูมิปรากฏ"), el("dd", {}, `${fmt(c.apparent_temperature, 0)} °C`),
       el("dt", {}, "💧 ความชื้น"), el("dd", {}, `${fmt(c.relative_humidity_2m, 0)} %`),
       el("dt", {}, "💨 ลมกระโชก"), el("dd", {}, `${fmt(c.wind_gusts_10m, 0)} กม./ชม.`),
       el("dt", {}, "☁️ เมฆ"), el("dd", {}, `${fmt(c.cloud_cover, 0)} %`)));
@@ -641,16 +642,16 @@ function renderNow() {
 //   RQ4 การแจ้งของประชาชน → ปุ่มบนหน้าเว็บ
 // (สถานีอุตุฯ ใกล้ตำแหน่ง tmd3h ยังคำนวณอยู่ แต่ซ้ำกับส่วนทั่วประเทศ จึงไม่แสดง)
 const V_SOURCES = [
-  { key: "national", icon: "🗺️", title: "สถานีอุตุฯ ทั่วประเทศ", desc: "~120 สถานี + โทรมาตร ~3,200 เครื่อง · เมือง vs ชนบท (RQ1–2)",
+  { key: "national", icon: "🗺️", title: "สถานีอุตุนิยมวิทยาทั่วประเทศ", desc: "~120 สถานี และโทรมาตร ~3,200 เครื่อง · เขตเมืองเทียบชนบท (RQ1–2)",
     vars: [["national_rain", "ฝนรายวัน"], ["national3h_rain", "ฝน 3 ชม."], ["national_tmin", "อุณหภูมิต่ำสุด"],
       ["national_tmax", "อุณหภูมิสูงสุด"], ["national3h_temp", "อุณหภูมิ 3 ชม."], ["allgauge_rain", "ฝนรายวัน · โทรมาตรทุกเครื่อง"]],
-    wait: "คำนวณวันละครั้งหลังกรมอุตุฯ สรุปผล 07.00 น." },
-  { key: "tw", icon: "🏙️", title: "เครื่องวัดฝนในเมือง", desc: "โทรมาตรทุกเครื่องในเขตเมือง + จุดตรวจ กทม./อยุธยา · โมเดลละเอียดสูง (RQ3)",
+    wait: "ประมวลผลวันละครั้งหลังกรมอุตุนิยมวิทยาสรุปผล 07:00 น." },
+  { key: "tw", icon: "🏙️", title: "เครื่องวัดฝนในเขตเมือง", desc: "โทรมาตรทุกเครื่องในเขตเมือง และจุดตรวจสอบ กทม./อยุธยา · แบบจำลองความละเอียดสูง (RQ3)",
     vars: [["urbangauge_rain", "ฝนรายวัน · ทุกเครื่องในเขตเมือง"], ["thaiwater24h_rain", "ฝนรายวัน · จุดตรวจ"], ["tw3h_rain", "ฝน 3 ชม."],
       ["hii24h_rain", "ฝน 19–19 น. (เทียบ HII)"]], kind: "tw",
-    wait: "ใช้รอบรันที่ออกก่อนต้นช่วงวัด · HII ออกผลวันละรอบ 19:00 น." },
-  { key: "user", icon: "🙋", title: "คนแจ้งผ่านปุ่ม", desc: "ตก / ไม่ตก จากปุ่มด้านบนสุด (RQ4)",
-    vars: [["user_rain", "ตก/ไม่ตก"]], wait: "ยังไม่มีการกดปุ่ม 🌧️/☀️ ด้านบน" },
+    wait: "ใช้รอบการประมวลผลที่เริ่มก่อนต้นช่วงตรวจวัด · HII เผยแพร่วันละรอบ 19:00 น." },
+  { key: "user", icon: "🙋", title: "รายงานจากผู้ใช้", desc: "มีฝน / ไม่มีฝน จากปุ่มรายงานด้านบน (RQ4)",
+    vars: [["user_rain", "มีฝน/ไม่มีฝน"]], wait: "ยังไม่มีรายงานจากผู้ใช้" },
 ];
 function leadText(l) {
   if (l.includes("|")) { const [b, g] = l.split("|"); return `${leadText(b)} · ${g}`; }
@@ -661,20 +662,20 @@ function leadText(l) {
 }
 function habit(r) {
   if (r.bias == null) return el("span", { class: "habit" }, "–");
-  if (r.bias > 1.25) return el("span", { class: "habit" }, "↑ ทายฝนบ่อยเกิน");
-  if (r.bias < 0.8) return el("span", { class: "habit" }, "↓ ทายฝนน้อยเกิน");
-  return el("span", { class: "habit ok" }, "✓ พอดี");
+  if (r.bias > 1.25) return el("span", { class: "habit" }, "↑ พยากรณ์ฝนบ่อยเกิน");
+  if (r.bias < 0.8) return el("span", { class: "habit" }, "↓ พยากรณ์ฝนน้อยเกิน");
+  return el("span", { class: "habit ok" }, "✓ สมดุล");
 }
 function tempHabit(r) {
   if (r.bias == null) return "–";
   if (Math.abs(r.bias) < 0.3) return "✓ ใกล้เคียง";
-  return `${r.bias > 0 ? "↑ ทายสูงไป" : "↓ ทายต่ำไป"} ${fmt(Math.abs(r.bias))} °C`;
+  return `${r.bias > 0 ? "↑ สูงกว่าค่าจริง" : "↓ ต่ำกว่าค่าจริง"} ${fmt(Math.abs(r.bias))} °C`;
 }
 
 // ---------------------------------------------------------------------------
 // 👤 มุมผู้ใช้: ถ้าเว็บบอกว่าฝนจะตก เชื่อได้แค่ไหน (verification.json → user_mode)
 // ---------------------------------------------------------------------------
-const U_WIN_TEXT = { "+3": "อีก 3 ชม.", "+6": "อีก 6 ชม.", "+12": "อีก 12 ชม.", "+24": "อีก 24 ชม.", "D+1": "พรุ่งนี้", "D+3": "อีก 3 วัน", "D+7": "อีก 7 วัน" };
+const U_WIN_TEXT = { "+3": "ล่วงหน้า 3 ชม.", "+6": "ล่วงหน้า 6 ชม.", "+12": "ล่วงหน้า 12 ชม.", "+24": "ล่วงหน้า 24 ชม.", "D+1": "วันถัดไป", "D+3": "ล่วงหน้า 3 วัน", "D+7": "ล่วงหน้า 7 วัน" };
 const winKey = (w) => (/^\+(\d+)/.exec(w) ? `+${/^\+(\d+)/.exec(w)[1]}` : /^D\+(\d+)/.exec(w) ? `D+${/^D\+(\d+)/.exec(w)[1]}` : w);
 function userScope() {
   const U = state.verify?.user_mode;
@@ -691,9 +692,9 @@ function trustBadge(w) {
   const r = medianRow(winKey(w));
   if (!state.verify?.user_mode) return null;
   if (!r || r.n < 10 || r.n_rain < 3)
-    return el("div", { class: "trust wait", title: "ต้องมีข้อมูลอย่างน้อย 10 ครั้ง และฝนตกจริงอย่างน้อย 3 ครั้ง" }, `📊 กำลังสะสมข้อมูล (${r ? r.n : 0} ครั้ง)`);
-  return el("div", { class: "trust", title: `ค่ากลางทุกโมเดล · ${r.n} ครั้ง · ${state.verify.user_mode.days} วันล่าสุด` },
-    `📊 ที่ผ่านมา: บอกว่าตก → ตกจริง ${fmt(r.sr10 ?? 0, 0)}/10 · ฝนตก → เตือนไว้ ${fmt(r.pod10 ?? 0, 0)}/10`);
+    return el("div", { class: "trust wait", title: "ต้องมีข้อมูลอย่างน้อย 10 ครั้ง และเหตุการณ์ฝนอย่างน้อย 3 ครั้ง" }, `📊 กำลังรวบรวมข้อมูล (${r ? r.n : 0} ครั้ง)`);
+  return el("div", { class: "trust", title: `ค่ามัธยฐานของทุกแบบจำลอง · ${r.n} ครั้ง · ${state.verify.user_mode.days} วันล่าสุด` },
+    `📊 สถิติย้อนหลัง: พยากรณ์ว่ามีฝน → เกิดจริง ${fmt(r.sr10 ?? 0, 0)}/10 · เกิดฝน → พยากรณ์ไว้ ${fmt(r.pod10 ?? 0, 0)}/10`);
 }
 function renderUserMode() {
   const V = state.verify, U = V?.user_mode;
@@ -707,7 +708,7 @@ function renderUserMode() {
   if (mode !== "user") return;
   const sc = userScope();
   if (!U || !sc) {
-    $("u-summary").replaceChildren(el("p", {}, "⏳ กำลังสะสมข้อมูล — ระบบเริ่มเก็บแบบมุมผู้ใช้แล้ว"));
+    $("u-summary").replaceChildren(el("p", {}, "⏳ กำลังรวบรวมข้อมูลสำหรับมุมมองผู้ใช้งาน"));
     return;
   }
   const wins = U.windows.filter((w) => sc.data[w]);
@@ -721,40 +722,40 @@ function renderUserMode() {
   const best = [...models].sort((a, b) => (b.csi ?? 0) - (a.csi ?? 0))[0];
   const scopeTxt = sc.name === "ทุกตำแหน่ง" ? "ทุกจุดตรวจ" : `จุดตรวจของ${sc.name}`;
   $("u-summary").replaceChildren(el("p", {}, ...(med ? [
-    el("b", {}, U_WIN_TEXT[w]), `: ถ้าเว็บนี้ (ค่ากลางทุกโมเดล) บอกว่าฝนตก → `, el("b", {}, `ตกจริง ${fmt(med.sr10 ?? 0, 0)} ใน 10 ครั้ง`),
-    ` · ถ้าฝนตกจริง → `, el("b", {}, `เตือนไว้ก่อน ${fmt(med.pod10 ?? 0, 0)} ใน 10 ครั้ง`),
-    ` (${med.n.toLocaleString("th-TH")} ครั้ง, ฝนตกจริง ${med.n_rain} ครั้ง, ${scopeTxt})`,
-    best ? [` · แหล่งที่ทายฝนเก่งสุดช่วงนี้: `, el("b", {}, best.model)] : "",
-    med.n < 30 ? " · ข้อมูลยังน้อย ผลอาจเปลี่ยน" : ""].flat() : ["⏳ ยังไม่มีข้อมูลพอสำหรับช่วงนี้"])));
+    el("b", {}, U_WIN_TEXT[w]), `: เมื่อระบบ (ค่ามัธยฐานของทุกแบบจำลอง) พยากรณ์ว่ามีฝน → `, el("b", {}, `เกิดจริง ${fmt(med.sr10 ?? 0, 0)} ใน 10 ครั้ง`),
+    ` · เมื่อเกิดฝน → `, el("b", {}, `พยากรณ์ไว้ล่วงหน้า ${fmt(med.pod10 ?? 0, 0)} ใน 10 ครั้ง`),
+    ` (${med.n.toLocaleString("th-TH")} ครั้ง, เกิดฝน ${med.n_rain} ครั้ง, ${scopeTxt})`,
+    best ? [` · แหล่งที่มีทักษะสูงสุดในช่วงนี้: `, el("b", {}, best.model)] : "",
+    med.n < 30 ? " · ขนาดตัวอย่างยังน้อย ผลอาจเปลี่ยนแปลง" : ""].flat() : ["⏳ ข้อมูลยังไม่เพียงพอสำหรับช่วงนี้"])));
   const bar = (x) => el("td", { class: "barcell" }, el("span", { class: "meter wide", "aria-hidden": "true" },
     el("i", { style: `width:${Math.max(3, (x ?? 0) * 10)}%` })), " ", el("b", {}, x == null ? "–" : `${fmt(x, 0)}/10`));
   const order = [med, rows.find((r) => r.model === U.ens), ...rows.filter((r) => r.model !== U.median && r.model !== U.ens)].filter(Boolean);
   $("u-table").replaceChildren(el("table", { class: "v-simple" },
-    el("thead", {}, el("tr", {}, ...["แหล่ง", "บอกว่าตก → ตกจริง", "ฝนตก → เตือนไว้", "ทายถูก", `ฝนหนัก (≥ ${U.heavy_mm[w]} มม.) เตือนได้`, "ครั้ง"]
+    el("thead", {}, el("tr", {}, ...["แหล่ง", "พยากรณ์มีฝน → เกิดจริง", "เกิดฝน → พยากรณ์ไว้", "ความถูกต้องรวม", `ฝนหนัก (≥ ${U.heavy_mm[w]} มม.) ที่พยากรณ์ได้`, "ครั้ง"]
       .map((h, i) => el("th", { style: i === 0 ? "text-align:left" : null }, h)))),
     el("tbody", {}, order.map((r) => el("tr", { class: r.model === U.median ? "accent" : null },
-      el("th", { scope: "row" }, r.model, r.model === U.median ? el("span", { class: "km" }, "ตัวที่หน้าเว็บแสดง") : null),
+      el("th", { scope: "row" }, r.model, r.model === U.median ? el("span", { class: "km" }, "ค่าที่แสดงบนหน้าเว็บ") : null),
       bar(r.sr10), bar(r.pod10), el("td", { class: "num" }, r.acc == null ? "–" : `${fmt(r.acc, 0)}%`),
-      el("td", { class: "num" }, r.heavy_n ? `${Math.round((r.heavy_pod10 ?? 0) * r.heavy_n / 10)}/${r.heavy_n}` : "ยังไม่มีฝนหนัก"),
+      el("td", { class: "num" }, r.heavy_n ? `${Math.round((r.heavy_pod10 ?? 0) * r.heavy_n / 10)}/${r.heavy_n}` : "ยังไม่มีเหตุการณ์ฝนหนัก"),
       el("td", { class: "num" }, r.n.toLocaleString("th-TH")))))));
   // ช่วงของวัน (ค่ากลางทุกโมเดล)
   const tod = (sc.data[w] || {}).tod || {};
   const TODS = [["เช้า", "07–13 น."], ["บ่าย", "13–19 น."], ["ค่ำ", "19–01 น."], ["ดึก", "01–07 น."]].filter(([t]) => tod[t]);
-  $("u-tod").replaceChildren(...(TODS.length ? [el("h4", {}, `ช่วงของวัน (เริ่มช่วง${U_WIN_TEXT[w]})`),
-    el("table", { class: "v-simple" }, el("thead", {}, el("tr", {}, ...["ช่วง", "บอกตก → ตกจริง", "ฝนตก → เตือนไว้", "ครั้ง"].map((h) => el("th", {}, h)))),
+  $("u-tod").replaceChildren(...(TODS.length ? [el("h4", {}, `ช่วงเวลาของวัน (${U_WIN_TEXT[w]})`),
+    el("table", { class: "v-simple" }, el("thead", {}, el("tr", {}, ...["ช่วง", "พยากรณ์มีฝน → เกิดจริง", "เกิดฝน → พยากรณ์ไว้", "ครั้ง"].map((h) => el("th", {}, h)))),
       el("tbody", {}, TODS.map(([t, hh]) => el("tr", {}, el("th", { scope: "row" }, `${t} `, el("span", { class: "km" }, hh)),
         el("td", { class: "num" }, tod[t].sr10 == null ? "–" : `${fmt(tod[t].sr10, 0)}/10`),
         el("td", { class: "num" }, tod[t].pod10 == null ? "–" : `${fmt(tod[t].pod10, 0)}/10`),
         el("td", { class: "num" }, tod[t].n)))))] : []));
   // โอกาสฝน % เชื่อได้ไหม
   const rel = (sc.data._reliability || []).filter((b) => b.n);
-  $("u-rel").replaceChildren(...(w === "+3" && rel.length ? [el("h4", {}, "“โอกาสฝน %” เชื่อได้ไหม (อีก 3 ชม.)"),
-    el("table", { class: "v-simple" }, el("thead", {}, el("tr", {}, ...["เว็บบอก", "ฝนตกจริง", "ครั้ง"].map((h) => el("th", {}, h)))),
+  $("u-rel").replaceChildren(...(w === "+3" && rel.length ? [el("h4", {}, "ความน่าเชื่อถือของความน่าจะเป็นฝน (ล่วงหน้า 3 ชม.)"),
+    el("table", { class: "v-simple" }, el("thead", {}, el("tr", {}, ...["ความน่าจะเป็นที่พยากรณ์", "ความถี่ที่เกิดจริง", "ครั้ง"].map((h) => el("th", {}, h)))),
       el("tbody", {}, rel.map((b) => el("tr", {}, el("th", { scope: "row" }, `${b.lo}–${b.hi}%`),
         el("td", { class: "num" }, b.freq == null ? "–" : `${b.freq}%`), el("td", { class: "num" }, b.n))))),
-    el("p", { class: "note" }, "ถ้าเชื่อได้ ตัวเลขสองคอลัมน์ควรใกล้กัน เช่น บอก 60–80% → ฝนตกจริงราว 70%")] : []));
-  $("u-note").textContent = `${U.days} วันล่าสุด (เริ่ม ${U.since || "–"}) · ค่าวัด: เครื่องวัดฝนโทรมาตรรายชั่วโมง + สถานีอุตุฯ ราย 3 ชม. ที่จุดตรวจ · ` +
-    `Google Weather มีเฉพาะจุดตรวจ กทม. 2 จุด ล่วงหน้า 48 ชม. · ฝนหนัก: +3/+6 ชม. ≥ 10, +12/+24 ชม. ≥ 20, รายวัน ≥ 35 มม.`;
+    el("p", { class: "note" }, "หากความน่าจะเป็นมีความน่าเชื่อถือ (reliable) ค่าทั้งสองคอลัมน์ควรใกล้เคียงกัน เช่น พยากรณ์ 60–80% → เกิดจริงประมาณ 70%")] : []));
+  $("u-note").textContent = `${U.days} วันล่าสุด (เริ่ม ${U.since || "–"}) · ค่าตรวจวัด: เครื่องวัดฝนโทรมาตรรายชั่วโมงและสถานีอุตุนิยมวิทยาราย 3 ชม. ณ จุดตรวจสอบ · ` +
+    `Google Weather มีเฉพาะจุดตรวจสอบ กทม. 2 จุด ล่วงหน้า 48 ชม. · เกณฑ์ฝนหนัก: +3/+6 ชม. ≥ 10, +12/+24 ชม. ≥ 20, รายวัน ≥ 35 มม.`;
 }
 
 function renderVerify() {
@@ -775,7 +776,7 @@ function renderVerify() {
       el("span", { class: "v-ico" }, x.icon),
       el("b", {}, x.title),
       el("span", { class: "v-desc" }, x.desc + (pts ? ` · ${pts} จุดตรวจ` : "")),
-      el("span", { class: n ? "v-badge ok" : "v-badge" }, n ? `มีผลแล้ว ${n.toLocaleString("th-TH")} ครั้ง` : "⏳ กำลังสะสมข้อมูล"));
+      el("span", { class: n ? "v-badge ok" : "v-badge" }, n ? `ผลแล้ว ${n.toLocaleString("th-TH")} คู่` : "⏳ กำลังรวบรวมข้อมูล"));
   }));
 
   // ตัวแปร (ฝน/อุณหภูมิ) และช่วงล่วงหน้า
@@ -793,33 +794,33 @@ function renderVerify() {
   $("v-leads").replaceChildren(...pick.leads.map((l) =>
     el("button", { class: "chip", role: "tab", type: "button", "aria-selected": String(l === lead),
       onclick: () => { state.vLead = l; renderVerify(); } }, leadText(l),
-      el("span", { class: "chip-n" }, ` · ${((pick.tables || {})[l] || []).length} โมเดล`))));
-  $("v-sub").textContent = `${V.days} วันล่าสุด · เริ่มเก็บ ${V.since || "วันนี้"} · อัปเดต ${timeAgo(V.updated)}`;
+      el("span", { class: "chip-n" }, ` · ${((pick.tables || {})[l] || []).length} แบบจำลอง`))));
+  $("v-sub").textContent = `${V.days} วันล่าสุด · เริ่มรวบรวม ${V.since || "วันนี้"} · ปรับปรุง ${timeAgo(V.updated)}`;
 
   const rows = (pick.tables || {})[lead] || [];
   const rain = pick.variable === "rain";
   if (!rows.length) {
-    $("v-summary").replaceChildren(el("p", {}, `⏳ กำลังสะสมข้อมูล — ${src.wait}`));
+    $("v-summary").replaceChildren(el("p", {}, `⏳ กำลังรวบรวมข้อมูล — ${src.wait}`));
     ["v-table", "v-table-full", "v-ens"].forEach((id) => $(id).replaceChildren());
     $("v-note").textContent = "";
   } else {
     // สรุปเป็นประโยคธรรมดา
     const best = rows[0], worst = rows[rows.length - 1];
-    const few = best.n < 30 ? " (ข้อมูลยังน้อย ผลอาจเปลี่ยน)" : "";
+    const few = best.n < 30 ? " (ขนาดตัวอย่างยังน้อย ผลอาจเปลี่ยนแปลง)" : "";
     const sum = rain
-      ? [el("b", {}, leadText(lead)), `: `, el("b", {}, best.model), ` ทายฝนเก่งที่สุด — คะแนนทายฝน ${fmt(best.csi, 0)} จาก 100 · `,
-         `ทายตก/ไม่ตกถูก ${fmt(best.acc, 0)}% จาก ${best.n.toLocaleString("th-TH")} ครั้ง`, few,
-         rows.length > 1 ? ` · ต่ำสุดคือ ${worst.model} (${fmt(worst.csi, 0)})` : ""]
-      : [el("b", {}, leadText(lead)), `: `, el("b", {}, best.model), ` แม่นที่สุด — คลาดเฉลี่ย ${fmt(best.mae)} °C (${tempHabit(best)})`, few,
-         rows.length > 1 ? ` · คลาดมากสุดคือ ${worst.model} (${fmt(worst.mae)} °C)` : ""];
+      ? [el("b", {}, leadText(lead)), `: `, el("b", {}, best.model), ` มีทักษะสูงสุด — CSI ${fmt(best.csi, 0)} จาก 100 · `,
+         `ความถูกต้องรวม ${fmt(best.acc, 0)}% จาก ${best.n.toLocaleString("th-TH")} ครั้ง`, few,
+         rows.length > 1 ? ` · ต่ำสุด ${worst.model} (${fmt(worst.csi, 0)})` : ""]
+      : [el("b", {}, leadText(lead)), `: `, el("b", {}, best.model), ` ถูกต้องที่สุด — MAE ${fmt(best.mae)} °C (${tempHabit(best)})`, few,
+         rows.length > 1 ? ` · คลาดเคลื่อนมากที่สุด ${worst.model} (${fmt(worst.mae)} °C)` : ""];
     $("v-summary").replaceChildren(el("p", {}, ...sum));
 
     // ตารางแบบง่าย
     const worstMae = Math.max(...rows.map((r) => r.mae || 0), 0.1);
     const barCell = (pct, text) => el("td", { class: "barcell" },
       el("span", { class: "meter wide", "aria-hidden": "true" }, el("i", { style: `width:${Math.max(3, pct)}%` })), " ", el("b", {}, text));
-    const head = rain ? ["#", "โมเดล", "คะแนนทายฝน (0–100)", "ทายถูก", "นิสัย", "ครั้ง"]
-                      : ["#", "โมเดล", "คลาดเฉลี่ย (ยิ่งสั้นยิ่งดี)", "มักทาย", "ครั้ง"];
+    const head = rain ? ["#", "แบบจำลอง", "CSI (0–100)", "ความถูกต้องรวม", "Frequency bias", "ครั้ง"]
+                      : ["#", "แบบจำลอง", "MAE (ค่าน้อยดีกว่า)", "ความเอนเอียง", "ครั้ง"];
     $("v-table").replaceChildren(el("table", { class: "v-simple" },
       el("thead", {}, el("tr", {}, ...head.map((h, i) => el("th", { style: i === 1 ? "text-align:left" : null }, h)))),
       el("tbody", {}, rows.map((r, i) => el("tr", { class: r.model === state.highlight ? "accent" : null },
@@ -833,15 +834,15 @@ function renderVerify() {
 
     // รายละเอียดเชิงเทคนิค
     const cols = rain
-      ? [["csi", "CSI %"], ["acc", "ทายถูก %"], ["pod", "POD %"], ["far", "FAR %"], ["bias", "Bias"], ["mae", "MAE มม."], ["n", "n"]]
+      ? [["csi", "CSI %"], ["acc", "Accuracy %"], ["pod", "POD %"], ["far", "FAR %"], ["bias", "Bias"], ["mae", "MAE มม."], ["n", "n"]]
       : [["mae", "MAE °C"], ["bias", "Bias °C"], ["rmse", "RMSE °C"], ["n", "n"]];
     $("v-table-full").replaceChildren(el("table", {},
-      el("thead", {}, el("tr", {}, el("th", { style: "text-align:left" }, "โมเดล"), ...cols.map(([, h]) => el("th", {}, h)))),
+      el("thead", {}, el("tr", {}, el("th", { style: "text-align:left" }, "แบบจำลอง"), ...cols.map(([, h]) => el("th", {}, h)))),
       el("tbody", {}, rows.map((r) => el("tr", {}, el("th", { scope: "row" }, r.model),
         ...cols.map(([k]) => el("td", { class: "num" }, r[k] == null ? "–" : fmt(r[k], k === "n" ? 0 : k === "bias" && rain ? 2 : 1))))))));
     const ens = (pick.ens_tables || {})[lead] || [];
     $("v-ens").replaceChildren(...(ens.length ? [el("table", {},
-      el("thead", {}, el("tr", {}, el("th", { style: "text-align:left" }, "Ensemble (โอกาสฝน)"),
+      el("thead", {}, el("tr", {}, el("th", { style: "text-align:left" }, "Ensemble (ความน่าจะเป็นฝน)"),
         ...["Brier (ต่ำดี)", "ทายถูก %", "POD %", "FAR %", "n"].map((h) => el("th", {}, h)))),
       el("tbody", {}, ens.map((r) => el("tr", {}, el("th", { scope: "row" }, r.model),
         ...["brier", "acc", "pod", "far", "n"].map((k) => el("td", { class: "num" }, r[k] == null ? "–" : fmt(r[k], k === "brier" ? 3 : k === "n" ? 0 : 1)))))))] : []));
