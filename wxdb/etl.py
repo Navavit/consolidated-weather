@@ -166,12 +166,17 @@ def hii(archive, day, name2site):
 
 
 def heat_district(archive, day):
-    x = _read_csv(Path(archive) / "heatsafe" / "daily" / f"{day:%Y-%m-%d}.csv.gz", dtype={"dcode": str})
-    if x is None or not len(x):
-        return pd.DataFrame()
-    return pd.DataFrame({"issued": _utc(x["issued"]), "site_id": "bkkdist:" + x["dcode"], "model_id": x.model.map(catalog.model_id),
-                         "date": pd.to_datetime(x["date"]), "lead_day": x["lead_day"], "tmax": x["tmax"], "tmin": x["tmin"],
-                         "rh_min": x["rh_min"], "hi_max_raw": x["hi_max_raw"], "bias": x["bias"], "hi_max": x["hi_max"], "precip": x["rain"]})
+    """พยากรณ์รายวันต่อแบบจำลอง: รายเขต กทม. (heatsafe/, ปรับแก้ความเอนเอียง) และรายจังหวัด (national/, ไม่ปรับแก้)"""
+    out = []
+    for sub, prefix in (("heatsafe", "bkkdist:"), ("national", "prov:")):
+        x = _read_csv(Path(archive) / sub / "daily" / f"{day:%Y-%m-%d}.csv.gz", dtype={"dcode": str})
+        if x is None or not len(x):
+            continue
+        raw = x["hi_max_raw"] if "hi_max_raw" in x else x["hi_max"]
+        out.append(pd.DataFrame({"issued": _utc(x["issued"]), "site_id": prefix + x["dcode"], "model_id": x.model.map(catalog.model_id),
+                                 "date": pd.to_datetime(x["date"]), "lead_day": x["lead_day"], "tmax": x["tmax"], "tmin": x["tmin"],
+                                 "rh_min": x["rh_min"], "hi_max_raw": raw, "bias": x.get("bias"), "hi_max": x["hi_max"], "precip": x["rain"]}))
+    return pd.concat(out, ignore_index=True) if out else pd.DataFrame()
 
 
 def pairs(archive, day, name2site):
@@ -205,6 +210,9 @@ def static_sites(archive):
                               "lat": la, "lon": lo, "source_id": "openmeteo"} for la, lo, n in locs]
                             + [{"site_id": "user:gps", "network": "user", "native_id": "gps", "name": "รายงานผู้ใช้ตามพิกัด GPS (ไม่ระบุพิกัด)",
                                 "source_id": "user"}]))
+    pv = pd.read_csv(core.ROOT / "resources" / "th_provinces.csv")
+    out.append(pd.DataFrame({"site_id": "prov:" + pv.pcode, "network": "prov", "native_id": pv.pcode, "name": "จุดตัวแทนจังหวัด" + pv.province_th,
+                             "province": pv.province_th, "lat": pv.lat, "lon": pv.lon, "source_id": "openmeteo"}))
     pj = Path(archive) / "verification" / "points.json"
     if pj.exists():
         p = pd.DataFrame(json.loads(pj.read_text(encoding="utf-8")))

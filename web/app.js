@@ -137,6 +137,7 @@ async function init() {
   $("updated").textContent = `ปรับปรุงล่าสุด ${timeAgo(state.index.generated)} · ${new Date(state.index.generated).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}`;
   const wantAbout = location.hash === "#about";
   const wantHeat = location.hash === "#heat";
+  const wantNat = location.hash === "#th";
   initFolds();     // อ่านก่อน เพราะการเลือกตำแหน่งจะล้าง hash
   initRainBar();
   getJSON("data/verification.json").then((v) => {
@@ -155,6 +156,7 @@ async function init() {
   await selectLocation(saved < state.index.locations.length ? saved : 0, false);
   if (wantAbout) showAbout(true);
   else if (wantHeat || tab === "heat") showHeat(true);
+  else if (wantNat || tab === "th") showNat(true);
   else if (tab === "gps") selectGps(false);
   let t;
   window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(renderCharts, 150); });
@@ -190,6 +192,8 @@ function renderChips() {
     ...state.index.locations.map((l, i) =>
       el("button", { class: "chip", role: "tab", type: "button", "data-idx": String(i), "aria-selected": String(i === state.locIdx),
         onclick: () => selectLocation(i) }, l.name)),
+    el("button", { class: "chip", id: "nat-chip", role: "tab", type: "button", "aria-selected": "false",
+      onclick: () => showNat(true) }, "🇹🇭 ทั่วประเทศ"),
     el("button", { class: "chip", id: "heat-chip", role: "tab", type: "button", "aria-selected": "false",
       onclick: () => showHeat(true) }, "🌡️ ภัยความร้อนรายเขต"),
     el("button", { class: "chip", id: "about-chip", role: "tab", type: "button", "aria-selected": "false",
@@ -198,9 +202,10 @@ function renderChips() {
 function markChips() {
   const about = document.body.classList.contains("about-mode");
   const heat = document.body.classList.contains("heat-mode");
-  const other = about || heat;
+  const nat = document.body.classList.contains("nat-mode");
+  const other = about || heat || nat;
   [...$("locations").children].forEach((c) => c.setAttribute("aria-selected", String(
-    c.id === "about-chip" ? about : c.id === "heat-chip" ? heat
+    c.id === "about-chip" ? about : c.id === "heat-chip" ? heat : c.id === "nat-chip" ? nat
       : !other && (c.id === "gps-chip" ? state.locIdx === -1 : Number(c.dataset.idx) === state.locIdx))));
   $("gps-note").hidden = other || state.locIdx !== -1;
 }
@@ -209,7 +214,7 @@ function markChips() {
 // ℹ️ เกี่ยวกับโครงการ (แท็บสุดท้าย · ลิงก์ตรงด้วย #about)
 // ---------------------------------------------------------------------------
 async function showAbout(on) {
-  if (on) document.body.classList.remove("heat-mode");
+  if (on) document.body.classList.remove("heat-mode", "nat-mode");
   document.body.classList.toggle("about-mode", on);
   if (on && location.hash !== "#about") history.replaceState(null, "", "#about");
   if (!on && location.hash === "#about") history.replaceState(null, "", location.pathname);
@@ -246,8 +251,8 @@ async function showAbout(on) {
 }
 
 async function selectLocation(i, remember = true) {
-  document.body.classList.remove("about-mode", "heat-mode");
-  if (location.hash === "#about") history.replaceState(null, "", location.pathname);
+  document.body.classList.remove("about-mode", "heat-mode", "nat-mode");
+  if (["#about", "#heat", "#th"].includes(location.hash)) history.replaceState(null, "", location.pathname);
   state.locIdx = i;
   state.gps = null;                         // เปลี่ยนแท็บ = กลับมาใช้ตำแหน่งของแท็บนั้น
   if (remember) store.set("tab", `loc:${i}`);
@@ -280,6 +285,7 @@ function showLocation() {
       radius: 10, color: cssVar("--ink"), weight: 3, fillColor: cssVar("--ink"), fillOpacity: 1,
     }).bindTooltip("ตำแหน่งของผู้ใช้", { direction: "top", className: "map-label" }).addTo(state.map);
   }
+  renderNearSkill();
 }
 
 function renderAll() {
@@ -473,8 +479,8 @@ async function buildLocalPayload(lat, lon) {
 }
 
 async function selectGps(remember = true) {
-  document.body.classList.remove("about-mode", "heat-mode");
-  if (location.hash === "#about") history.replaceState(null, "", location.pathname);
+  document.body.classList.remove("about-mode", "heat-mode", "nat-mode");
+  if (["#about", "#heat", "#th"].includes(location.hash)) history.replaceState(null, "", location.pathname);
   if (remember) store.set("tab", "gps");
   markChips();
   const chip = $("gps-chip");
@@ -1406,7 +1412,7 @@ const HS_P_ORANGE = ["#fff3e0", "#ffcc80", "#fb8c00", "#bf360c"];
 const HS_P_RAIN = ["#e3f2fd", "#90caf9", "#1e88e5", "#0d47a1"];
 
 async function showHeat(on) {
-  document.body.classList.remove("about-mode");
+  document.body.classList.remove("about-mode", "nat-mode");
   document.body.classList.toggle("heat-mode", on);
   if (on) { history.replaceState(null, "", "#heat"); store.set("tab", "heat"); }
   markChips();
@@ -1534,4 +1540,277 @@ function renderHeatMethod() {
       el("li", {}, `ไม่รวมแบบจำลองที่ยังไม่มีผลการทดสอบย้อนหลัง: ${(hs.data.models_excluded || []).join(", ") || "–"}`),
       el("li", {}, `แหล่งค่าปรับแก้: ${C.source || "–"} · ปรับปรุงค่าปรับแก้ ${C.generated ? new Date(C.generated).toLocaleDateString("th-TH") : "–"}`),
       el("li", {}, "ผลพยากรณ์นี้เป็นผลจากแบบจำลองเชิงตัวเลข มิใช่ประกาศเตือนภัยอย่างเป็นทางการ")));
+}
+
+// ---------------------------------------------------------------------------
+// 🇹🇭 ทั่วประเทศ: พยากรณ์รายจังหวัด และความถูกต้องรายสถานี/รายภาค · ลิงก์ตรงด้วย #th
+// ข้อมูล: data/national.json (weather_national.py) · ขอบเขตจังหวัด: th_provinces.geojson (Natural Earth)
+// ---------------------------------------------------------------------------
+const NT_FC = {
+  tmax: { label: "อุณหภูมิสูงสุด", unit: "°C", steps: [30, 32, 34, 36, 38], colors: ["#fff7bc", "#fee391", "#fec44f", "#fe9929", "#ec7014", "#b33f00"],
+    names: ["< 30", "30–31.9", "32–33.9", "34–35.9", "36–37.9", "≥ 38"] },
+  hi: { label: "ระดับดัชนีความร้อน", unit: "°C" },
+  rain: { label: "ฝนรายวัน", unit: "มม.", steps: [1, 5, 10, 20, 35], colors: ["#f7fbff", "#c6dbef", "#9ecae1", "#6baed6", "#3182bd", "#08519c"],
+    names: ["< 1", "1–4.9", "5–9.9", "10–19.9", "20–34.9", "≥ 35"] },
+  p_rain: { label: "ความน่าจะเป็นฝน", unit: "%" },
+};
+const NT_VAR = {
+  temp: { label: "อุณหภูมิราย 3 ชม.", metric: "MAE", unit: "°C" },
+  tmax: { label: "อุณหภูมิสูงสุดรายวัน", metric: "MAE", unit: "°C" },
+  tmin: { label: "อุณหภูมิต่ำสุดรายวัน", metric: "MAE", unit: "°C" },
+  rain: { label: "ฝนรายวัน", metric: "CSI", unit: "" },
+};
+const NT_MAE = { steps: [1, 1.5, 2, 2.5, 3], colors: ["#1a9850", "#91cf60", "#d9ef8b", "#fee08b", "#fc8d59", "#d73027"],
+  names: ["< 1.0", "1.0–1.4", "1.5–1.9", "2.0–2.4", "2.5–2.9", "≥ 3.0 °C"] };
+const NT_CSI = { steps: [20, 35, 50, 65], colors: ["#d73027", "#fc8d59", "#fee08b", "#91cf60", "#1a9850"],
+  names: ["< 20", "20–34", "35–49", "50–64", "≥ 65"] };
+const NT_LEAD = { H24: "ล่วงหน้า 24 ชม.", H72: "ล่วงหน้า 72 ชม.", H168: "ล่วงหน้า 168 ชม." };
+const nt = { data: null, geo: null, mode: "fc", day: 1, metric: "tmax", vvar: "temp", lead: "H24", model: "_best", sel: null, ssel: null,
+  map: null, layer: null, fitted: false };
+const ntStep = (v, s) => (v == null ? "#d9d9d9" : s.colors[s.steps.filter((x) => v >= x).length]);
+const ntIsMae = () => NT_VAR[nt.vvar].metric === "MAE";
+const ntBetter = (a, b) => (ntIsMae() ? a < b : a > b);
+
+async function loadNat() {
+  if (!nt.data) nt.data = await getJSON("data/national.json");
+  return nt.data;
+}
+
+async function showNat(on) {
+  document.body.classList.remove("about-mode", "heat-mode");
+  document.body.classList.toggle("nat-mode", on);
+  if (on) { history.replaceState(null, "", "#th"); store.set("tab", "th"); }
+  markChips();
+  if (!on) return;
+  window.scrollTo({ top: 0 });
+  try {
+    await loadNat();
+    if (!nt.geo) nt.geo = await getJSON("th_provinces.geojson");
+  } catch (e) {
+    $("nt-updated").textContent = "ยังไม่มีข้อมูล — ระบบจะสร้างในรอบการประมวลผลถัดไป";
+    return;
+  }
+  if (!nt.map && typeof L !== "undefined") {
+    nt.map = L.map("nt-map", { scrollWheelZoom: false, zoomSnap: 0.25 });
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · ขอบเขต: Natural Earth', maxZoom: 14, opacity: 0.55 }).addTo(nt.map);
+    $("nt-map").classList.toggle("dark-tiles", isDark());
+  }
+  renderNat();
+  requestAnimationFrame(() => nt.map && nt.map.invalidateSize());
+}
+
+function ntChips(id, items, cur, onpick) {
+  $(id).replaceChildren(...items.map(([k, label]) => el("button", { class: "chip", role: "tab", type: "button",
+    "aria-selected": String(k === cur), onclick: () => onpick(k) }, label)));
+}
+
+function ntScore(s, model) {
+  const t = s.scores?.[nt.vvar]?.[nt.lead];
+  if (!t) return null;
+  if (model !== "_best") return t[model] ? { model, v: t[model][0], n: t[model][4] ?? t[model][2] } : null;
+  let best = null;
+  for (const [m, a] of Object.entries(t)) if (a[0] != null && (!best || ntBetter(a[0], best.v))) best = { model: m, v: a[0], n: a[4] ?? a[2] };
+  return best;
+}
+
+function renderNat() {
+  const D = nt.data, F = D.forecast;
+  ntChips("nt-mode", [["fc", "🗺️ พยากรณ์รายจังหวัด"], ["vf", "🎯 ความถูกต้องรายสถานี"]], nt.mode, (k) => { nt.mode = k; renderNat(); });
+  const fc = nt.mode === "fc";
+  $("nt-fc-ctl").hidden = !fc;
+  $("nt-vf-ctl").hidden = fc;
+  const VP = D.verify_period || {};
+  $("nt-updated").textContent = fc
+    ? (F ? `พยากรณ์ประมวลผล ${new Date(F.generated).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })} · ` +
+      `${F.provinces.length} จังหวัด · มัธยฐานของ ${F.models.length} แบบจำลอง (${F.models.join(", ")}) · ปรับปรุงทุกประมาณ 6 ชั่วโมง` : "ยังไม่มีผลพยากรณ์")
+    : `ค่าตรวจวัด ${D.stations.length} สถานีของกรมอุตุนิยมวิทยา · ช่วง ${VP.from || "–"} ถึง ${VP.to || "–"} · ` +
+      `ปรับปรุง ${new Date(D.generated).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}`;
+  if (nt.layer) { nt.layer.remove(); nt.layer = null; }
+  if (fc) renderNatFc(); else renderNatVf();
+  if (nt.map && nt.layer && !nt.fitted) { nt.map.fitBounds([[5.6, 97.3], [20.5, 105.7]]); nt.fitted = true; }
+  renderNatMethod();
+}
+
+function ntFcColor(d) {
+  if (!d) return "#d9d9d9";
+  if (nt.metric === "hi") return d.lvl == null ? "#d9d9d9" : HS_COLORS[d.lvl];
+  if (nt.metric === "p_rain") return hsPctColor(d.p_rain, HS_P_RAIN);
+  return ntStep(d[nt.metric], NT_FC[nt.metric]);
+}
+
+function renderNatFc() {
+  const F = nt.data.forecast;
+  if (!F) return;
+  const days = F.provinces[0].days;
+  if (nt.day >= days.length) nt.day = 0;
+  const dayLabel = (d) => `${d.lead_day === 0 ? "วันนี้" : `+${d.lead_day} วัน`} · ${new Date(d.date).toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short" })}`;
+  ntChips("nt-days", days.map((d, i) => [i, dayLabel(d)]), nt.day, (k) => { nt.day = k; renderNat(); });
+  ntChips("nt-metric", Object.entries(NT_FC).map(([k, m]) => [k, m.label]), nt.metric, (k) => { nt.metric = k; renderNat(); });
+  const byCode = Object.fromEntries(F.provinces.map((p) => [p.pcode, p]));
+  if (nt.map) {
+    nt.layer = L.geoJSON(nt.geo, {
+      style: (f) => ({ color: "#ffffff", weight: 0.8, fillOpacity: 0.85, fillColor: ntFcColor(byCode[f.properties.pcode]?.days[nt.day]) }),
+      onEachFeature: (f, ly) => {
+        const d = byCode[f.properties.pcode]?.days[nt.day];
+        ly.bindTooltip(`<b>${f.properties.name}</b> <small>${f.properties.region}</small><br>อุณหภูมิสูงสุด ${fmt(d?.tmax)} °C (${fmt(d?.tmax_lo)}–${fmt(d?.tmax_hi)}) · ต่ำสุด ${fmt(d?.tmin)} °C<br>` +
+          `ดัชนีความร้อนสูงสุด ${fmt(d?.hi)} °C · ฝน ${fmt(d?.rain)} มม. (ความน่าจะเป็น ${d?.p_rain ?? "–"}%)`, { sticky: true, className: "map-label" });
+        ly.on("click", () => { nt.sel = f.properties.pcode; renderNatFcDetail(); });
+      },
+    }).addTo(nt.map);
+  }
+  const m = NT_FC[nt.metric];
+  const legend = nt.metric === "hi" ? HS_NAMES.map((n, i) => [HS_COLORS[i], n])
+    : nt.metric === "p_rain" ? HS_P_RAIN.map((c, i) => [c, ["< 10%", "10–39%", "40–69%", "≥ 70%"][i]])
+      : m.colors.map((c, i) => [c, `${m.names[i]} ${m.unit}`]);
+  $("nt-legend").replaceChildren(...legend.map(([c, n]) => el("span", { class: "lg" },
+    el("i", { style: `display:inline-block;width:14px;height:14px;border-radius:3px;background:${c}` }), n)));
+  // ตารางรายจังหวัด: จัดกลุ่มตามภาค
+  const val = (d) => (nt.metric === "hi" ? fmt(d.hi) : nt.metric === "p_rain" ? `${d.p_rain ?? "–"}%` : fmt(d[nt.metric]));
+  const regions = [...new Set(F.provinces.map((p) => p.region))];
+  $("nt-table").replaceChildren(el("table", { class: "hs-table" },
+    el("thead", {}, el("tr", {}, el("th", {}, "จังหวัด"), ...days.map((d, i) => el("th", { class: i === nt.day ? "sel" : null },
+      d.lead_day === 0 ? "วันนี้" : `+${d.lead_day}`, el("span", { class: "wsub" }, new Date(d.date).toLocaleDateString("th-TH", { day: "numeric", month: "short" })))))),
+    ...regions.map((r) => el("tbody", {},
+      el("tr", { class: "nt-region" }, el("th", { colspan: String(days.length + 1) }, r)),
+      F.provinces.filter((p) => p.region === r).sort((a, b) => a.name.localeCompare(b.name, "th")).map((p) => el("tr", {},
+        el("td", {}, el("a", { onclick: () => { nt.sel = p.pcode; renderNatFcDetail(); $("nt-detail").scrollIntoView({ block: "nearest" }); } }, p.name)),
+        ...p.days.map((d) => { const c = ntFcColor(d); return el("td", { class: "lv", style: `background:${c};color:${inkOn(c)}` }, val(d)); })))))));
+  if (!nt.sel || !byCode[nt.sel]) nt.sel = "TH-10";
+  renderNatFcDetail();
+}
+
+function renderNatFcDetail() {
+  const p = nt.data.forecast?.provinces.find((x) => x.pcode === nt.sel);
+  if (!p) return;
+  const lvlTag = (d) => { const c = d.lvl == null ? "#d9d9d9" : HS_COLORS[d.lvl];
+    return el("span", { class: "hs-lvl", style: `background:${c};color:${inkOn(c)}` }, fmt(d.hi)); };
+  $("nt-detail").replaceChildren(
+    el("h4", {}, `จังหวัด${p.name}`, el("span", { class: "muted", style: "font-weight:400;font-size:12px" }, `  ${p.region}`)),
+    el("table", {},
+      el("thead", {}, el("tr", {}, ...["วัน", "Tmax °C (ช่วง)", "Tmin °C", "HI สูงสุด °C", "ฝน มม. (P)"].map((h) => el("th", {}, h)))),
+      el("tbody", {}, p.days.map((d) => el("tr", {},
+        el("td", {}, d.lead_day === 0 ? "วันนี้" : `+${d.lead_day}`),
+        el("td", {}, `${fmt(d.tmax)} (${fmt(d.tmax_lo)}–${fmt(d.tmax_hi)})`),
+        el("td", {}, fmt(d.tmin)),
+        el("td", {}, lvlTag(d)),
+        el("td", {}, `${fmt(d.rain)} (${d.p_rain ?? "–"}%)`))))),
+    el("p", { class: "note" }, `ค่า ณ จุดตัวแทนของจังหวัด (${p.lat.toFixed(2)}, ${p.lon.toFixed(2)}) · ค่ามัธยฐานของแบบจำลอง · ช่วง = ต่ำสุด–สูงสุดระหว่างแบบจำลอง · ` +
+      `P = สัดส่วนของแบบจำลองที่ฝนรายวัน ≥ ${nt.data.forecast.rain_threshold_mm} มม. · ดัชนีความร้อนยังไม่ปรับแก้ความเอนเอียง`));
+}
+
+function renderNatVf() {
+  const D = nt.data;
+  ntChips("nt-var", Object.entries(NT_VAR).map(([k, v]) => [k, v.label]), nt.vvar, (k) => { nt.vvar = k; renderNat(); });
+  ntChips("nt-lead", D.leads.map((l) => [l, NT_LEAD[l] || l]), nt.lead, (k) => { nt.lead = k; renderNat(); });
+  const models = D.verify_models || [];
+  $("nt-model").replaceChildren(el("option", { value: "_best", selected: nt.model === "_best" }, "แบบจำลองที่ถูกต้องที่สุดของแต่ละสถานี"),
+    ...models.map((m) => el("option", { value: m, selected: m === nt.model }, m)));
+  $("nt-model").onchange = (e) => { nt.model = e.target.value; renderNat(); };
+  const scale = ntIsMae() ? NT_MAE : NT_CSI;
+  if (nt.map) {
+    nt.layer = L.layerGroup(D.stations.map((s) => {
+      const sc = ntScore(s, nt.model);
+      const c = sc ? ntStep(sc.v, scale) : "#d9d9d9";
+      return L.circleMarker([s.lat, s.lon], { radius: 7, color: "#333", weight: 0.8, fillColor: c, fillOpacity: 0.95 })
+        .bindTooltip(`<b>${s.name}</b> <small>จ.${s.province || "–"}</small><br>` +
+          (sc ? `${NT_VAR[nt.vvar].metric} ${fmt(sc.v, ntIsMae() ? 2 : 0)}${NT_VAR[nt.vvar].unit ? " " + NT_VAR[nt.vvar].unit : ""} · ${sc.model} · ${sc.n} ครั้ง` : "ยังไม่มีข้อมูล"),
+        { className: "map-label" })
+        .on("click", () => { nt.ssel = s.id; renderNatVfDetail(); });
+    })).addTo(nt.map);
+  }
+  $("nt-legend").replaceChildren(...scale.colors.map((c, i) => el("span", { class: "lg" },
+    el("i", { style: `display:inline-block;width:14px;height:14px;border-radius:50%;background:${c}` }), `${NT_VAR[nt.vvar].metric} ${scale.names[i]}`)),
+    el("span", { class: "lg" }, el("i", { style: "display:inline-block;width:14px;height:14px;border-radius:50%;background:#d9d9d9" }), "ไม่มีข้อมูล"));
+  // ตารางรายภาค: แบบจำลอง × ภาค
+  const regs = D.regions.map((r) => r.region);
+  const col = (o) => o?.[nt.vvar]?.[nt.lead] || {};
+  const cols = [...D.regions.map(col), col(D.national)];
+  const best = cols.map((t) => { let b = null; for (const [m, a] of Object.entries(t)) if (a[0] != null && (b == null || ntBetter(a[0], t[b][0]))) b = m; return b; });
+  const rowModels = [...new Set(cols.flatMap((t) => Object.keys(t)))].sort((a, b) => {
+    const x = col(D.national)[a]?.[0], y = col(D.national)[b]?.[0];
+    return x == null ? 1 : y == null ? -1 : ntIsMae() ? x - y : y - x;
+  });
+  $("nt-table").replaceChildren(el("table", { class: "hs-table nt-vtable" },
+    el("thead", {}, el("tr", {}, el("th", {}, "แบบจำลอง"), ...regs.map((r) => el("th", {}, r.replace("ภาค", ""))), el("th", {}, "ทั้งประเทศ"))),
+    el("tbody", {}, rowModels.map((m) => el("tr", {}, el("td", {}, m),
+      ...cols.map((t, j) => {
+        const a = t[m];
+        if (!a || a[0] == null) return el("td", {}, "–");
+        const c = ntStep(a[0], scale);
+        return el("td", { class: "lv", style: `background:${c};color:${inkOn(c)};${best[j] === m ? "font-weight:700;outline:2px solid var(--ink);outline-offset:-2px" : ""}` },
+          fmt(a[0], ntIsMae() ? 2 : 0), el("small", {}, `${a[4] ?? a[2]} ครั้ง`));
+      }))))));
+  if (!nt.ssel) nt.ssel = "48455";
+  renderNatVfDetail();
+}
+
+function renderNatVfDetail() {
+  const s = nt.data.stations.find((x) => x.id === nt.ssel);
+  if (!s) return;
+  const t = s.scores?.[nt.vvar] || {};
+  const leads = nt.data.leads;
+  const models = [...new Set(leads.flatMap((l) => Object.keys(t[l] || {})))].sort((a, b) => {
+    const x = t[nt.lead]?.[a]?.[0], y = t[nt.lead]?.[b]?.[0];
+    return x == null ? 1 : y == null ? -1 : ntIsMae() ? x - y : y - x;
+  });
+  const scale = ntIsMae() ? NT_MAE : NT_CSI;
+  $("nt-detail").replaceChildren(
+    el("h4", {}, s.name, el("span", { class: "muted", style: "font-weight:400;font-size:12px" }, `  จ.${s.province || "–"} · ${s.region || ""}`)),
+    el("p", { class: "note" }, `ค่าตรวจวัดล่าสุด ${s.time ? s.time.replace("T", " ") : "–"} น.: อุณหภูมิ ${fmt(s.temp)} °C · ฝน 24 ชม. ${fmt(s.rain_24h)} มม.`),
+    models.length ? el("table", {},
+      el("thead", {}, el("tr", {}, el("th", {}, `${NT_VAR[nt.vvar].label} (${NT_VAR[nt.vvar].metric})`), ...leads.map((l) => el("th", {}, l.replace("H", "") + " ชม.")))),
+      el("tbody", {}, models.map((m) => el("tr", {}, el("td", {}, m), ...leads.map((l) => {
+        const a = t[l]?.[m];
+        if (!a || a[0] == null) return el("td", {}, "–");
+        const c = ntStep(a[0], scale);
+        return el("td", {}, el("span", { class: "hs-lvl", style: `background:${c};color:${inkOn(c)}` }, fmt(a[0], ntIsMae() ? 2 : 0)));
+      }))))) : el("p", {}, "ยังไม่มีคู่พยากรณ์–ค่าตรวจวัดของสถานีนี้"),
+    el("p", { class: "note" }, ntIsMae() ? "MAE = ค่าคลาดเคลื่อนสัมบูรณ์เฉลี่ย (°C) ค่าน้อยดีกว่า" : "CSI = critical success index (0–100) ค่ามากดีกว่า · เหตุการณ์ฝน = ≥ 1 มม./วัน"));
+}
+
+function renderNatMethod() {
+  const D = nt.data, VP = D.verify_period || {};
+  $("nt-method").replaceChildren(
+    el("p", {}, "พยากรณ์รายจังหวัดคำนวณ ณ จุดตัวแทนของแต่ละจังหวัด (representative point ของขอบเขตจังหวัด ซึ่งอยู่ภายในจังหวัดเสมอ) " +
+      "จากผลพยากรณ์รายชั่วโมงของแบบจำลองระดับโลก 4 ระบบผ่าน Open-Meteo แล้วสรุปเป็นค่ารายวันตามวันปฏิทินเวลาไทย และรายงานค่ามัธยฐานของแบบจำลอง " +
+      "ดัชนีความร้อนคำนวณด้วยสมการของ National Weather Service และจัดระดับตามเกณฑ์ของกรุงเทพมหานคร/กรมอนามัย โดย<b>ยังไม่ปรับแก้ความเอนเอียง</b> " +
+      "เนื่องจากค่าปรับแก้ที่มีอยู่ได้จากสถานีในกรุงเทพมหานครเท่านั้น"),
+    el("p", {}, `ความถูกต้องรายสถานีคำนวณจากคู่พยากรณ์–ค่าตรวจวัดของสถานีอุตุนิยมวิทยาทั่วประเทศในช่วง ${VP.days || 30} วันล่าสุด (${VP.from || "–"} ถึง ${VP.to || "–"}) ` +
+      "อุณหภูมิราย 3 ชม. เทียบกับรายงาน synoptic (Weather3Hours) ส่วนฝนรายวันและอุณหภูมิสูงสุด/ต่ำสุดเทียบกับสรุปรายวันเวลา 07:00 น. (WeatherToday) " +
+      "ผลพยากรณ์ได้จาก Open-Meteo Previous Runs API ณ ระยะล่วงหน้าที่กำหนด ภาคแบ่งตามกรมอุตุนิยมวิทยา (6 ภาค)"),
+    el("ul", {},
+      el("li", {}, "จุดตัวแทนเพียงจุดเดียวไม่สะท้อนความแปรปรวนภายในจังหวัด โดยเฉพาะจังหวัดที่มีพื้นที่ภูเขาหรือชายฝั่ง"),
+      el("li", {}, "ขนาดตัวอย่างรายสถานีประมาณ 30 วัน คะแนนฝน (CSI) รายสถานีจึงมีความไม่แน่นอนสูง ควรพิจารณาคะแนนรายภาคประกอบ"),
+      el("li", {}, "ผลพยากรณ์นี้เป็นผลจากแบบจำลองเชิงตัวเลข มิใช่ประกาศของกรมอุตุนิยมวิทยา")));
+}
+
+// ความถูกต้อง ณ สถานีอุตุนิยมวิทยาที่ใกล้ตำแหน่งที่เลือกที่สุด (ใช้ได้ทุกตำแหน่งในประเทศ)
+async function renderNearSkill() {
+  const box = $("near-skill");
+  if (!box || !state.loc) return;
+  try { await loadNat(); } catch { box.replaceChildren(); return; }
+  const lat = state.loc.lat, lon = state.loc.lon;
+  let s = null, dmin = Infinity;
+  for (const x of nt.data.stations) {
+    if (!x.scores?.temp) continue;
+    const d = distKm(lat, lon, x.lat, x.lon);
+    if (d < dmin) { dmin = d; s = x; }
+  }
+  if (!s) { box.replaceChildren(); return; }
+  const top = (v, k) => {
+    const t = s.scores?.[v]?.H24 || {};
+    const arr = Object.entries(t).filter(([, a]) => a[0] != null);
+    arr.sort((a, b) => (k === "min" ? a[1][0] - b[1][0] : b[1][0] - a[1][0]));
+    return arr[0];
+  };
+  const tb = top("temp", "min"), rb = top("rain", "max");
+  const VP = nt.data.verify_period || {};
+  box.replaceChildren(el("div", { class: "near-card" },
+    el("b", {}, "📍 ณ สถานีอุตุนิยมวิทยาที่ใกล้ที่สุด: "), `${s.name} (จ.${s.province || "–"}, ห่าง ${fmt(dmin, 0)} กม.)`,
+    el("br"),
+    tb ? ["แบบจำลองที่พยากรณ์อุณหภูมิล่วงหน้า 24 ชม. ถูกต้องที่สุด: ", el("b", {}, tb[0]), ` (MAE ${fmt(tb[1][0], 2)} °C)`] : "",
+    rb ? [" · ฝนรายวัน: ", el("b", {}, rb[0]), ` (CSI ${fmt(rb[1][0], 0)})`] : "",
+    el("span", { class: "muted" }, ` · ${VP.from || "–"} ถึง ${VP.to || "–"} · `),
+    el("a", { href: "#th", onclick: (e) => { e.preventDefault(); nt.mode = "vf"; nt.ssel = s.id; showNat(true); } }, "ดูทั่วประเทศ →")));
 }

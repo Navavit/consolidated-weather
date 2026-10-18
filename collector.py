@@ -41,6 +41,12 @@ def cmd_run(args):
             weather_heatsafe.update(args.export_dir, site_dir=getattr(args, "site_dir", None))
         except Exception as e:
             print(f"⚠️ HEAT-SAFE: {e}")
+        # ทั่วประเทศ: พยากรณ์รายจังหวัด (ทุก ~6 ชม.) และความถูกต้องรายสถานี/รายภาค (ทุกรอบ)
+        import weather_national
+        try:
+            weather_national.update(args.export_dir, site_dir=getattr(args, "site_dir", None))
+        except Exception as e:
+            print(f"⚠️ ทั่วประเทศ: {e}")
     print(pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"))
     print(log.to_string(index=False))
     return 0 if (log.status == "ok").all() else 1

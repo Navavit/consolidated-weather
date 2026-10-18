@@ -49,6 +49,7 @@ flowchart LR
 |---|---|---|---|
 | เก็บข้อมูลและตรวจสอบ | ทุกชั่วโมง | `collector.py run` (`collect.yml`) | branch `data`, หน้าเว็บ |
 | พยากรณ์ภัยความร้อนรายเขต กทม. | ทุก ~3 ชั่วโมง | `weather_heatsafe.py` | `heatsafe.json`, ค่ารายวันต่อแบบจำลอง |
+| พยากรณ์รายจังหวัดและความถูกต้องรายสถานีทั่วประเทศ | ทุก ~6 ชั่วโมง / ทุกชั่วโมง | `weather_national.py` | `national.json`, ค่ารายวันต่อแบบจำลอง |
 | พยากรณ์กริดทั่วประเทศ (0.25°) | วันละ 2 รอบ | `python -m wxdb grid` (`database.yml`) | ตาราง `forecast_grid` |
 | แปลงคลังระยะสั้นเข้าฐานข้อมูล | วันละครั้ง | `python -m wxdb etl` | ตารางค่าตรวจวัด พยากรณ์ และคู่ตรวจสอบ |
 | รวมไฟล์รายเดือนและลดขนาดคลังระยะสั้น | รายเดือน | `python -m wxdb pack`, `prune` | `<table>__YYYY-MM.parquet` |
@@ -178,14 +179,15 @@ Consolidated_Weather/
 ├── weather_gauges.py         # ฝนรายวันที่โทรมาตรทุกเครื่องเทียบ Previous Runs
 ├── weather_hii.py            # อ่านพยากรณ์ฝน HII WRF-ROMS จากภาพของ ThaiWater
 ├── weather_heatsafe.py       # พยากรณ์ภัยความร้อนรายเขต กทม. (Heat Index ปรับแก้ความเอนเอียง)
+├── weather_national.py       # ทั่วประเทศ: พยากรณ์ 77 จังหวัด และความถูกต้องรายสถานี/รายภาค
 ├── weather_site.py           # สร้างข้อมูล JSON สำหรับหน้าเว็บ
 ├── weather_store.py          # SQLite ในเครื่อง (โหมดใช้งานบนเครื่องส่วนตัว)
 ├── wxdb/                     # ฐานข้อมูลระยะยาว: schema, catalog, etl, grid, store, CLI
 ├── web/                      # หน้าเว็บ (index.html, app.js, style.css) — GitHub Pages
-├── resources/                # gauges.csv, bkk_districts.csv, grid_th025.csv, heatsafe_calibration.json
+├── resources/                # gauges.csv, bkk_districts.csv, th_provinces.csv, grid_th025.csv, heatsafe_calibration.json
 ├── analysis/                 # การวิเคราะห์ย้อนหลังสำหรับบทความวิจัย (GSOD/ISD 2024–2025)
 ├── docs/                     # DATABASE.md, MODELS.md, SCHEDULER.md, paper_outline.md
-├── scripts/                  # build_grid.py, build_db_docs.py, สคริปต์จัดการ branch data
+├── scripts/                  # build_grid.py, build_provinces.py, build_db_docs.py, สคริปต์จัดการ branch data
 ├── .github/workflows/        # collect.yml (รายชั่วโมง), database.yml (ฐานข้อมูล), location.yml, observe.yml
 ├── config.json               # ตำแหน่งและค่ากำหนด (เผยแพร่)
 ├── config.local.json         # token เฉพาะเครื่อง (ไม่เผยแพร่)
@@ -231,6 +233,7 @@ pip install -r requirements-notebook.txt        # notebook
 - **① สภาพอากาศปัจจุบัน**: ค่าตรวจวัดจากสถานีที่ใกล้ที่สุด, PM2.5, เรดาร์ฝน และแผนที่สถานีทุกเครือข่าย
 - **② พยากรณ์**: ฝน +3/+6/+12/+24 ชม. และรายวัน D+1/D+3/D+7 จากค่ามัธยฐานของทุกแบบจำลอง พร้อมสถิติย้อนหลังของความถูกต้อง
 - **③–⑤**: ผลแยกแบบจำลอง, ความน่าจะเป็นจาก ensemble, HII, กราฟรายชั่วโมง, รอบการประมวลผล และ **การประเมินความถูกต้อง** สองมุมมอง (ผู้ใช้งานทั่วไป และมาตรฐาน WMO)
+- **🇹🇭 ทั่วประเทศ**: (1) พยากรณ์รายวันล่วงหน้า 7 วันของ 77 จังหวัด ได้แก่ อุณหภูมิสูงสุด, ระดับดัชนีความร้อน, ฝน และความน่าจะเป็นฝน จากค่ามัธยฐานของแบบจำลอง 4 ระบบ (2) ความถูกต้องของแบบจำลองรายสถานีอุตุนิยมวิทยาทุกแห่ง (~127 สถานี) และรายภาค ในช่วง 30 วันล่าสุด ทุกแท็บตำแหน่งยังแสดงความถูกต้อง ณ สถานีที่ใกล้ตำแหน่งนั้นที่สุด จึงใช้ได้ทุกพื้นที่ในประเทศ
 - **🌡️ ภัยความร้อนรายเขต**: Heat Index สูงสุดรายวัน 50 เขตของกรุงเทพมหานคร ล่วงหน้า 7 วัน ปรับแก้ความเอนเอียงด้วยผลทดสอบย้อนหลัง จำแนกระดับตามเกณฑ์ของกรุงเทพมหานคร และแสดงความน่าจะเป็นที่จะเกินเกณฑ์จากหลายแบบจำลอง
 
 ทดสอบในเครื่อง: `python3 collector.py run --no-db --site-dir site && python3 -m http.server -d site 8000`

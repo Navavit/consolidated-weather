@@ -129,6 +129,7 @@
 
     <section aria-labelledby="h-verify" class="verify">
       <h2 id="h-verify">🏆 การตรวจสอบความถูกต้องของแบบจำลอง <small id="v-sub">เทียบกับค่าตรวจวัด</small></h2>
+      <div id="near-skill"></div>
       <div class="chips v-mode" role="tablist" aria-label="มุมมอง">
         <button class="chip" id="vm-user" role="tab" type="button">👤 มุมมองผู้ใช้งาน</button>
         <button class="chip" id="vm-wmo" role="tab" type="button">🔬 มาตรฐาน WMO (สำหรับงานวิจัย)</button>
@@ -234,6 +235,32 @@
       </details>
     </section>
     </details>
+
+    <section id="national" aria-labelledby="h-nat">
+      <h2 id="h-nat">🇹🇭 ทั่วประเทศ <small>พยากรณ์ 77 จังหวัด และความถูกต้องของแบบจำลอง ณ สถานีอุตุนิยมวิทยาทุกแห่ง</small></h2>
+      <p class="note" id="nt-updated">กำลังโหลด…</p>
+      <div class="chips" id="nt-mode" role="tablist" aria-label="มุมมอง"></div>
+      <div id="nt-fc-ctl">
+        <div class="chips" id="nt-days" role="tablist" aria-label="วันพยากรณ์"></div>
+        <div class="chips" id="nt-metric" role="tablist" aria-label="ค่าที่แสดงบนแผนที่"></div>
+      </div>
+      <div id="nt-vf-ctl" hidden>
+        <div class="chips" id="nt-var" role="tablist" aria-label="ตัวแปร"></div>
+        <div class="chips" id="nt-lead" role="tablist" aria-label="ระยะล่วงหน้า"></div>
+        <label class="nt-model">แบบจำลอง <select id="nt-model"></select></label>
+      </div>
+      <div class="hs-grid">
+        <div id="nt-map" class="map" role="region" aria-label="แผนที่ประเทศไทย"></div>
+        <div id="nt-detail" class="hs-detail"></div>
+      </div>
+      <div class="map-legend" id="nt-legend"></div>
+      <h3>ตารางสรุป <small>คลิกชื่อจังหวัดหรือสถานีบนแผนที่เพื่อดูรายละเอียด · กรอบหนา = ค่าที่ดีที่สุดของแต่ละภาค</small></h3>
+      <div class="table-wrap" id="nt-table"></div>
+      <details class="hs-method">
+        <summary>วิธีการและข้อจำกัด</summary>
+        <div id="nt-method"></div>
+      </details>
+    </section>
 
     <section id="heatsafe" aria-labelledby="h-heat">
       <h2 id="h-heat">🌡️ พยากรณ์ภัยความร้อนรายเขต กรุงเทพมหานคร <small>สนับสนุนโครงการวิจัย HEAT-SAFE Bangkok (วช. 2570)</small></h2>

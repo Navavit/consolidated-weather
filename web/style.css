@@ -297,6 +297,24 @@ body.about-mode main > details.fold { display: none; }
 .pop { font-size: 13px; line-height: 1.5; min-width: 180px; }
 main > details.fold:last-of-type { margin-bottom: 28px; }
 
+/* ทั่วประเทศ: แสดงแทนส่วนพยากรณ์เมื่อเลือกแท็บ 🇹🇭 */
+#national { display: none; }
+body.nat-mode #national { display: block; }
+body.nat-mode main > section:not(#national), body.nat-mode main > details.fold, body.nat-mode #gps-note,
+body.nat-mode #edit-loc, body.nat-mode .steps, body.nat-mode .timebase { display: none; }
+#national h3 { font-size: 16px; margin: 22px 0 8px; }
+#national h3 small, #national h2 small { font-weight: 400; color: var(--muted); font-size: 13px; }
+#nt-mode, #nt-days, #nt-metric, #nt-var, #nt-lead { margin: 6px 0; }
+#nt-map { height: 620px; }
+@media (max-width: 760px) { #nt-map { height: 460px; } }
+.nt-model { font-size: 14px; color: var(--ink-2); }
+.nt-model select { margin-left: 6px; font: inherit; padding: 3px 6px; border-radius: 8px; }
+.hs-table tr.nt-region th { text-align: left; background: var(--surface); padding-top: 10px; font-size: 13.5px; }
+.nt-vtable td.lv { min-width: 64px; }
+#near-skill .near-card { background: var(--surface); border-radius: 10px; box-shadow: 0 0 0 1px var(--ring); padding: 8px 12px;
+  font-size: 13.5px; color: var(--ink-2); margin: 6px 0 10px; line-height: 1.6; }
+#near-skill a { cursor: pointer; }
+
 /* พยากรณ์ภัยความร้อนรายเขต (HEAT-SAFE): แสดงแทนส่วนพยากรณ์เมื่อเลือกแท็บ 🌡️ */
 #heatsafe { display: none; }
 body.heat-mode #heatsafe { display: block; }
